@@ -20,5 +20,6 @@ urlpatterns = [
     path("auth/password-reset/confirm/", views.password_reset_confirm),
     path("geocode/", views.geocode),
     path("geocode/reverse/", views.reverse_geocode),
+    path("ai/status/", views.ai_status),
     path("", include(router.urls)),
 ]

@@ -76,3 +76,6 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() == "true"
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER or "AgroFísica <no-reply@localhost>"
 GEOCODER_USER_AGENT = os.getenv("GEOCODER_USER_AGENT", "AgroFisica/0.1 (local development)")
+AGRO_AI_API_KEY = os.getenv("AGRO_AI_API_KEY", "")
+AGRO_AI_MODEL = os.getenv("AGRO_AI_MODEL", "gpt-4o-mini")
+AGRO_AI_URL = os.getenv("AGRO_AI_URL", "https://api.openai.com/v1/chat/completions")

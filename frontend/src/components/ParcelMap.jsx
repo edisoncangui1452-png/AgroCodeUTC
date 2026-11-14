@@ -66,12 +66,12 @@ function ViewController({ geometry, focus }) {
   return null
 }
 
-export default function ParcelMap({ geometry, onChange, point, onPoint, focus, satellite = false, date }) {
-  return <MapContainer center={focus?.center || point || [-1.4, -78.5]} zoom={point ? 15 : 6} className="h-full w-full" scrollWheelZoom>
+export default function ParcelMap({ geometry, onChange, point, onPoint, focus, searchMarker, satellite = false, date }) {
+  return <MapContainer center={focus?.center || point || [-1.4, -78.5]} zoom={point ? 15 : 6} minZoom={3} className="h-full w-full" scrollWheelZoom>
     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' />
     {satellite && <WMSTileLayer url="https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi" layers="MODIS_Terra_CorrectedReflectance_TrueColor" format="image/png" transparent opacity={0.85} time={date} attribution="NASA GIBS / MODIS Terra" />}
     {onChange ? <MapEditor geometry={geometry} onChange={onChange} onPoint={onPoint} /> : geometry?.coordinates && <Polygon positions={geometry.coordinates[0].map(([lon, lat]) => [lat, lon])} pathOptions={{ color: '#2d6a4f', weight: 3, fillOpacity: 0.2 }} />}
-    {point && !geometry && <Marker position={point} />}
+    {searchMarker ? <Marker position={searchMarker} /> : point && !geometry && <Marker position={point} />}
     <ViewController geometry={geometry} focus={focus} />
   </MapContainer>
 }

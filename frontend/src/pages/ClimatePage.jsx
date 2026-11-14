@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { CloudSun, MapPinned, RefreshCcw, Save } from 'lucide-react'
+import { MapPinned, RefreshCcw, Save } from 'lucide-react'
 import { CartesianGrid, Legend, Line, LineChart, Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api, errorMessage } from '../api'
 import { CropWindowCards, Empty, Heading, monthNames, ParcelSelect, useParcels } from './shared'
+import HistoricalReference from '../components/HistoricalReference'
 
 const chartVariables = [
   ['T2M', 'Temperatura media', '°C'], ['T2M_MAX', 'Temperatura máxima', '°C'],
@@ -51,6 +52,7 @@ export function ClimatePage() {
         <button className="button button-dark" disabled={!id || busy} onClick={() => load()}><RefreshCcw size={16} /> {busy ? 'Consultando NASA…' : 'Consultar datos'}</button>
       </div>
       {message && <p role="status" className="notice mt-4">{message}</p>}
+      {id && <HistoricalReference key={id} parcelId={id} />}
       {result && <>
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <div className="stat"><span className="text-sm text-muted">Periodo comparado</span><strong>{years.join(' · ')}</strong></div>
@@ -65,12 +67,6 @@ export function ClimatePage() {
               : <LineChart data={chartData}><CartesianGrid stroke="#e3eee5" vertical={false} /><XAxis dataKey="month" /><YAxis /><Tooltip /><Legend />{years.map((year, i) => <Line key={year} type="monotone" dataKey={String(year)} stroke={['#1b4332', '#52a576', '#a5d8b3'][i]} strokeWidth={3} connectNulls={false} />)}</LineChart>}
           </ResponsiveContainer></div>
         </div>
-        <div className="panel mt-5"><h2 className="text-xl font-bold">Escenario orientativo</h2><p className="mt-2 text-sm text-muted">Rango observado en tres años; no es un pronóstico. Tres años no permiten establecer una tendencia climática robusta.</p>
-          <div className="mt-5 grid gap-2 sm:grid-cols-3 lg:grid-cols-4">{result.scenario.map(item => <div key={item.month} className="rounded-xl bg-paper p-4"><strong>{monthNames[item.month - 1]}</strong><p className="mt-2 text-sm">T: {item.T2M ? `${item.T2M.min}–${item.T2M.max} °C` : 'Sin datos suficientes'}</p><p className="text-sm text-muted">Lluvia: {item.PRECTOTCORR ? `${item.PRECTOTCORR.min}–${item.PRECTOTCORR.max} mm` : 'Sin datos suficientes'}</p></div>)}</div>
-        </div>
-        <details className="panel mt-5"><summary className="cursor-pointer text-xl font-bold">Tabla comparativa <span className="ml-2 text-sm font-normal text-muted">Mostrar / ocultar</span></summary>
-          <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[650px] text-left text-sm"><thead><tr className="border-b border-line text-muted">{['Año', 'Mes', 'Temp. °C', 'Máx. °C', 'Mín. °C', 'Lluvia mm', 'Humedad %', 'Días válidos'].map(label => <th className="pb-3 pr-4" key={label}>{label}</th>)}</tr></thead><tbody>{result.monthly.map(row => <tr className="border-b border-line/60" key={`${row.year}-${row.month}`}><td className="py-2">{row.year}</td><td>{monthNames[row.month - 1]}</td><td>{row.T2M ?? '—'}</td><td>{row.T2M_MAX ?? '—'}</td><td>{row.T2M_MIN ?? '—'}</td><td>{row.PRECTOTCORR ?? '—'}</td><td>{row.RH2M ?? '—'}</td><td>{row.coverage.T2M}/{row.days}</td></tr>)}</tbody></table></div>
-        </details>
         <div className="mt-7"><div className="eyebrow">CICLOS DE CULTIVO</div><h2 className="mt-4 font-display text-2xl font-bold">Cultivos para explorar según la duración</h2>
           <p className="mb-5 mt-2 max-w-3xl text-sm leading-relaxed text-muted">Se contrasta la temperatura de <strong>todos los meses del crecimiento</strong> con tres temporadas históricas. Las fichas FAO Ecocrop son generales; no validan automáticamente un cultivo para tu localidad. La lluvia anual se informa como contexto, no como demanda de agua del ciclo.</p>
           <div className="space-y-4">{[2, 3, 6].map(duration => <CropWindowCards key={duration} candidates={candidates} duration={duration} />)}</div>

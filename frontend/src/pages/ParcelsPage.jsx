@@ -12,6 +12,7 @@ export function ParcelsPage() {
   const [geometry, setGeometry] = useState(null)
   const [point, setPoint] = useState(null)
   const [focus, setFocus] = useState(null)
+  const [searchMarker, setSearchMarker] = useState(null)
   const [name, setName] = useState('')
   const [country, setCountry] = useState('')
   const [location, setLocation] = useState('')
@@ -20,7 +21,7 @@ export function ParcelsPage() {
   const [satellite, setSatellite] = useState(false)
   const [date, setDate] = useState(new Date(Date.now() - 4 * 86400000).toISOString().slice(0, 10))
   const [profile, setProfile] = useState(emptyProfile)
-  const onGeometry = useCallback(g => { setGeometry(g); setFocus(null) }, [])
+  const onGeometry = useCallback(g => { setGeometry(g); setFocus(null); if (g) setSearchMarker(null) }, [])
   const onPoint = useCallback(p => setPoint(p), [])
 
   function choose(id) {
@@ -28,7 +29,7 @@ export function ParcelsPage() {
     const parcel = parcels.find(p => String(p.id) === String(id))
     if (parcel) {
       setName(parcel.name); setCountry(parcel.country); setLocation(parcel.location)
-      setGeometry(parcel.geometry); setPoint([parcel.latitude, parcel.longitude]); setFocus(null)
+      setGeometry(parcel.geometry); setPoint([parcel.latitude, parcel.longitude]); setFocus(null); setSearchMarker(null)
       api.get(`parcels/${id}/profile/`).then(({ data }) => setProfile({
         ...data,
         soil_texture: soilTextures.includes(data.soil_texture) ? data.soil_texture : '',
@@ -36,7 +37,7 @@ export function ParcelsPage() {
       })).catch(() => {})
     } else {
       setName(''); setCountry(''); setLocation(''); setGeometry(null); setPoint(null)
-      setFocus(null); setProfile(emptyProfile)
+      setFocus(null); setSearchMarker(null); setProfile(emptyProfile)
     }
   }
 
@@ -44,6 +45,7 @@ export function ParcelsPage() {
     const center = [Number(item.lat), Number(item.lon)]
     const bounds = item.boundingbox?.map(Number)
     setPoint(center)
+    setSearchMarker(center)
     setFocus(bounds?.length === 4 && bounds.every(Number.isFinite)
       ? { bounds: [[bounds[0], bounds[2]], [bounds[1], bounds[3]]], maxZoom: item.type === 'country' ? 7 : 16 }
       : { center, zoom: 15 })
@@ -67,7 +69,7 @@ export function ParcelsPage() {
     if (!navigator.geolocation) { setNotice('Este navegador no admite geolocalización. Usa la búsqueda.'); return }
     navigator.geolocation.getCurrentPosition(async pos => {
       const center = [pos.coords.latitude, pos.coords.longitude]
-      setPoint(center); setFocus({ center, zoom: 15 })
+      setPoint(center); setSearchMarker(center); setFocus({ center, zoom: 15 })
       try {
         const { data } = await api.get('geocode/reverse/', { params: { lat: center[0], lon: center[1] } })
         if (data.country_code && countryNames[data.country_code]) setCountry(data.country_code)
@@ -118,21 +120,21 @@ export function ParcelsPage() {
       <div className="min-w-0">
         <div className="mb-3 flex flex-wrap gap-2">
           <input className="input min-w-0 flex-1" aria-label="Buscar localidad o sector" placeholder="Buscar sector, ciudad o país…" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && find()} />
-          <button className="button button-outline" onClick={() => find()}><Search size={17} /> Buscar</button>
-          <button className="button button-outline" onClick={locate}><MapPin size={17} /> Ubicarme</button>
+          <button className="button button-outline" title="Busca un país, ciudad o sector; el mapa se centrará y colocará una chincheta." onClick={() => find()}><Search size={17} /> Buscar</button>
+          <button className="button button-outline" title="Solicita tu ubicación para centrar el mapa; requiere permiso del navegador." onClick={locate}><MapPin size={17} /> Ubicarme</button>
         </div>
         <div className="overflow-hidden rounded-2xl border border-line bg-white">
-          <div className="h-[490px]"><ParcelMap geometry={geometry} onChange={onGeometry} point={point} onPoint={onPoint} focus={focus} satellite={satellite} date={date} /></div>
+          <div className="h-[490px]"><ParcelMap geometry={geometry} onChange={onGeometry} point={point} onPoint={onPoint} focus={focus} searchMarker={searchMarker} satellite={satellite} date={date} /></div>
           <div className="flex flex-wrap items-center gap-3 border-t border-line p-4 text-xs">
-            <label className="flex items-center gap-2"><input type="checkbox" checked={satellite} onChange={e => setSatellite(e.target.checked)} /> NASA GIBS (MODIS Terra)</label>
+            <label className="flex items-center gap-2" title="Muestra u oculta la capa visual MODIS Terra de NASA; no aporta mediciones del terreno."><input type="checkbox" checked={satellite} onChange={e => setSatellite(e.target.checked)} /> NASA GIBS (MODIS Terra)</label>
             {satellite && <label>Fecha <input className="input ml-2 !w-auto !py-1" type="date" value={date} onChange={e => setDate(e.target.value)} /></label>}
             <span className="ml-auto text-muted">Imágenes satelitales, no mediciones de parcela.</span>
           </div>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-          <label className="button button-outline cursor-pointer"><Upload size={16} /> Importar GeoJSON<input className="hidden" type="file" accept=".json,.geojson,application/geo+json" onChange={importFile} /></label>
-          <button className="button button-outline" disabled={!geometry} onClick={exportFile}><Download size={16} /> Exportar</button>
-          <span className="text-muted">Usa los controles del mapa para dibujar o editar. La vista se acercará a tu parcela.</span>
+          <label className="button button-outline cursor-pointer" title="Abre un archivo .geojson o .json con un polígono para editarlo y guardarlo como parcela."><Upload size={16} /> Importar GeoJSON<input className="hidden" type="file" accept=".json,.geojson,application/geo+json" onChange={importFile} /></label>
+          <button className="button button-outline" title="Descarga el polígono actual como archivo parcela.geojson; no borra ni comparte datos." disabled={!geometry} onClick={exportFile}><Download size={16} /> Exportar</button>
+          <div className="w-full text-xs leading-relaxed text-muted"><strong>Importar:</strong> abre un archivo GeoJSON (.geojson o .json) que contenga un polígono; revisa país y guarda para conservarlo. <strong>Exportar:</strong> descarga el polígono actual como parcela.geojson para reutilizarlo en otra herramienta.</div>
         </div>
       </div>
       <div className="panel h-fit"><h2 className="text-xl font-bold">Datos de parcela</h2>
@@ -151,8 +153,8 @@ export function ParcelsPage() {
               <label className="field">Observaciones<input value={profile.notes || ''} placeholder="Condiciones conocidas del terreno" onChange={e => setProfile({ ...profile, notes: e.target.value })} /></label>
             </div>
           </details>
-          <button className="button button-dark w-full"><Save size={17} /> Guardar parcela</button>
-          {selected && <button type="button" className="button button-outline w-full" onClick={remove}><Trash2 size={16} /> Eliminar parcela</button>}
+          <button className="button button-dark w-full" title="Valida y guarda este polígono y perfil en tu cuenta."><Save size={17} /> Guardar parcela</button>
+          {selected && <button type="button" className="button button-outline w-full" title="Elimina permanentemente la parcela seleccionada y su historial; solicitará confirmación." onClick={remove}><Trash2 size={16} /> Eliminar parcela</button>}
         </form>
         {notice && <p role="status" className="notice mt-4">{notice}</p>}
       </div>

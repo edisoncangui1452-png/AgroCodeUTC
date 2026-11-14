@@ -2,6 +2,7 @@ import calendar
 from datetime import timedelta
 from statistics import mean, pstdev
 
+import numpy as np
 import requests
 from django.core.cache import cache
 from django.utils import timezone
@@ -20,6 +21,8 @@ UNITS = {
 POWER_URL = "https://power.larc.nasa.gov/api/temporal/daily/point"
 GEOD = Geod(ellps="WGS84")
 DASHBOARD_PARAMETERS = ["T2M", "PRECTOTCORR", "GWETTOP", "T2M_MIN"]
+BASELINE_PARAMETERS = ["T2M", "PRECTOTCORR", "T2M_MIN"]
+BASELINE_URL = "https://power.larc.nasa.gov/api/temporal/monthly/point"
 
 
 def validate_geometry(value):
@@ -185,6 +188,91 @@ def historical_scenario(monthly):
                          "variation": round(pstdev(valid), 2), "observations": len(valid)} if len(valid) >= 2 else None
         scenario.append(item)
     return scenario
+
+
+def historical_baseline(values, start_year=1983, end_year=2025):
+    """Monthly climatology. POWER monthly PRECTOTCORR is mm/day, not mm/month."""
+    series = []
+    for year in range(start_year, end_year + 1):
+        for month in range(1, 13):
+            key = f"{year}{month:02}"
+            row = {"year": year, "month": month}
+            for parameter in BASELINE_PARAMETERS:
+                value = values.get(parameter, {}).get(key)
+                valid = isinstance(value, (int, float)) and value > -900
+                row[parameter] = float(value) if valid else None
+            if row["PRECTOTCORR"] is not None and row["PRECTOTCORR"] >= 0:
+                row["rain_mm"] = row["PRECTOTCORR"] * calendar.monthrange(year, month)[1]
+            else:
+                row["rain_mm"] = None
+            series.append(row)
+    months = []
+    for month in range(1, 13):
+        rows = [row for row in series if row["month"] == month]
+        temps = [row["T2M"] for row in rows if row["T2M"] is not None]
+        rains = [row["rain_mm"] for row in rows if row["rain_mm"] is not None]
+        minima = [row["T2M_MIN"] for row in rows if row["T2M_MIN"] is not None]
+        def interval(data):
+            return {
+                "median": round(float(np.median(data)), 1),
+                "p10": round(float(np.percentile(data, 10)), 1),
+                "p90": round(float(np.percentile(data, 90)), 1),
+                "observations": len(data),
+            } if len(data) >= 30 else None
+        months.append({
+            "month": month, "temperature_c": interval(temps), "rain_mm": interval(rains),
+            "rain_ge_100mm_frequency_percent": round(100 * sum(v >= 100 for v in rains) / len(rains))
+            if len(rains) >= 30 else None,
+            "temperature_below_10c_frequency_percent": round(100 * sum(v < 10 for v in temps) / len(temps))
+            if len(temps) >= 30 else None,
+            "monthly_mean_min_below_zero_frequency_percent": round(100 * sum(v < 0 for v in minima) / len(minima))
+            if len(minima) >= 30 else None,
+            "minimum_years_checked": len(minima),
+        })
+    return months
+
+
+def get_historical_baseline(parcel):
+    cached = ClimateQuery.objects.filter(
+        parcel=parcel, latitude=parcel.latitude, longitude=parcel.longitude,
+        start_year=1983, end_year=2025, source="NASA POWER monthly point",
+        fetched_at__gte=timezone.now() - timedelta(days=90),
+    ).order_by("-fetched_at").first()
+    if cached:
+        values, fetched_at, from_cache = cached.payload, cached.fetched_at, True
+    else:
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+        with requests.Session() as session:
+            session.mount("https://", HTTPAdapter(max_retries=Retry(
+                total=2, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504],
+            )))
+            response = session.get(BASELINE_URL, params={
+                "parameters": ",".join(BASELINE_PARAMETERS), "community": "AG",
+                "longitude": parcel.longitude, "latitude": parcel.latitude,
+                "start": 1983, "end": 2025, "format": "JSON",
+            }, timeout=(5, 40))
+            response.raise_for_status()
+            data = response.json()
+        values = data.get("properties", {}).get("parameter", {})
+        if not all(isinstance(values.get(p), dict) for p in BASELINE_PARAMETERS):
+            raise ValueError("NASA POWER no devolvió la serie histórica esperada.")
+        entry = ClimateQuery.objects.create(
+            parcel=parcel, latitude=parcel.latitude, longitude=parcel.longitude,
+            start_year=1983, end_year=2025, payload=values, source="NASA POWER monthly point",
+            parameters=BASELINE_PARAMETERS,
+            units={"T2M": "°C", "PRECTOTCORR": "mm/día", "T2M_MIN": "°C"},
+            metadata={"api": data.get("header", {}).get("api", {}), "sources": data.get("header", {}).get("sources", [])},
+        )
+        fetched_at, from_cache = entry.fetched_at, False
+    return {
+        "period": [1983, 2025], "months": historical_baseline(values),
+        "source": "NASA POWER monthly point · AG", "fetched_at": fetched_at,
+        "cached": from_cache,
+            "notice": "Frecuencias empíricas de meses históricos, NO probabilidades calibradas para una fecha futura. "
+                  "T2M_MIN mensual es la media de mínimas diarias: no mide si hubo alguna helada en el mes. "
+                  "No hay pronóstico diario ni proyección anual. Los datos son regionales, no sensores de la parcela.",
+    }
 
 
 def recommendations(parcel, monthly):

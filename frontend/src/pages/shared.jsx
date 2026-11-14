@@ -13,6 +13,11 @@ export const soilTextures = [
   'Arenoso', 'Arenoso franco', 'Franco arenoso', 'Franco', 'Franco limoso', 'Limoso',
   'Franco arcillo-arenoso', 'Franco arcilloso', 'Franco arcillo-limoso', 'Arcillo-arenoso', 'Arcillo-limoso',
 ]
+export const cropVisuals = {
+  Papa: '🥔', Quinua: '🌾', Cebada: '🌾', Haba: '🫘', Arveja: '🫛',
+  Maíz: '🌽', Trigo: '🌾', Avena: '🌾', Chocho: '🫘', Zanahoria: '🥕',
+  Cebolla: '🧅', Repollo: '🥬', Remolacha: '🫜', Lechuga: '🥬', Rábano: '🫜',
+}
 
 export function useParcels() {
   const [parcels, setParcels] = useState([])
@@ -42,7 +47,7 @@ export function CropWindowCards({ candidates = [], duration }) {
   return <section className="rounded-2xl border border-line bg-white p-5">
     <div className="flex items-center justify-between gap-3"><h3 className="font-display text-lg font-bold">Ciclos de ~{duration} meses</h3><span className="rounded-full bg-mint px-3 py-1 text-xs font-bold text-leaf">{matching.length} candidatos</span></div>
     {matching.length ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{matching.map(c => <article key={c.crop} className="rounded-xl border border-line bg-paper p-4">
-      <div className="flex items-start justify-between gap-2"><strong className="text-base">{c.crop}</strong><span className="text-xs text-muted">{c.cycle_days}–{c.max_cycle_days} días</span></div>
+      <div className="flex items-start justify-between gap-2"><strong className="flex items-center gap-2 text-base"><span role="img" aria-label={`Ilustración de ${c.crop}`} className="text-2xl">{cropVisuals[c.crop] || '🌱'}</span>{c.crop}</strong><span className="text-xs text-muted">{c.cycle_days}–{c.max_cycle_days} días</span></div>
       <p className="mt-1 text-xs text-muted">{c.family} · {c.regional_validated ? 'Ficha regional' : 'Referencia FAO general'}</p>
       <p className="mt-3 text-sm"><strong>Inicio orientativo:</strong> {c.durations[String(duration)].map(w => monthNames[w.start_month - 1]).join(', ')}</p>
       <p className="mt-2 text-xs text-muted">Se evaluó cada mes del ciclo; al menos 2 temporadas históricas compatibles por inicio.</p>

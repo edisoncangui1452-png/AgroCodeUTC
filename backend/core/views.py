@@ -22,7 +22,7 @@ from .serializers import (
     AgronomistSerializer, AnalysisSerializer, CropSerializer, HistorySerializer,
     ParcelSerializer, ProfileSerializer, RegisterSerializer, UserSerializer,
 )
-from .services import UNITS, available_years, get_climate, get_dashboard_metrics, historical_scenario, monthly_summary, recommendations
+from .services import UNITS, available_years, get_climate, get_dashboard_metrics, get_historical_baseline, historical_scenario, monthly_summary, recommendations
 
 User = get_user_model()
 
@@ -192,6 +192,11 @@ def reverse_geocode(request):
         return Response({"detail": "No fue posible identificar el país de esta ubicación."}, status=503)
 
 
+@api_view(["GET"])
+def ai_status(request):
+    return Response({"configured": bool(settings.AGRO_AI_API_KEY), "model": settings.AGRO_AI_MODEL if settings.AGRO_AI_API_KEY else None})
+
+
 class ParcelViewSet(viewsets.ModelViewSet):
     serializer_class = ParcelSerializer
 
@@ -208,6 +213,14 @@ class ParcelViewSet(viewsets.ModelViewSet):
             return Response(get_dashboard_metrics(parcel))
         except (ValueError, requests.RequestException) as exc:
             return Response({"detail": f"No fue posible obtener indicadores NASA: {exc}"}, status=503)
+
+    @action(detail=True, methods=["get"], url_path="historical-baseline")
+    def baseline(self, request, pk=None):
+        parcel = self.get_object()
+        try:
+            return Response(get_historical_baseline(parcel))
+        except (ValueError, requests.RequestException) as exc:
+            return Response({"detail": f"No fue posible consultar el historial NASA: {exc}"}, status=503)
 
     @action(detail=True, methods=["get", "put"], url_path="profile")
     def profile(self, request, pk=None):
@@ -272,16 +285,69 @@ class ParcelViewSet(viewsets.ModelViewSet):
             names = [str(n)[:120].strip() for n in strategy["crops"]]
             matched = [catalog.get(n.lower()) for n in names]
             families = [c.family for c in matched if c]
+            repeated_neighbors = [
+                f"{names[i]} y {names[i + 1]} pertenecen a {matched[i].family}; consulta si conviene alternar familias."
+                for i in range(len(matched) - 1)
+                if matched[i] and matched[i + 1] and matched[i].family == matched[i + 1].family
+            ]
+            guidance = repeated_neighbors or ["No se detectaron familias consecutivas repetidas entre las fichas disponibles. La diversidad no garantiza evitar plagas."]
+            if any(not c for c in matched):
+                guidance.append("Faltan fichas para parte de la secuencia; no se puede evaluar la rotación completa.")
             result.append({
                 "name": strategy.get("name", f"Estrategia {index + 1}")[:100],
                 "crops": names, "documented": [c.name for c in matched if c],
                 "unknown": [name for name, c in zip(names, matched) if not c],
                 "families": len(set(families)), "repeated_families": len(families) - len(set(families)),
+                "guidance": guidance,
                 "notice": "Comparación exploratoria de familias FAO; no implica validación regional ni predice rendimiento o demanda de agua.",
             })
         output = {"strategies": result}
         Analysis.objects.create(owner=request.user, parcel=parcel, kind="rotation", title="Comparación de rotaciones", result=output)
         return Response(output)
+
+    @action(detail=True, methods=["post"], url_path="ai-rotation-review")
+    def ai_rotation_review(self, request, pk=None):
+        parcel = self.get_object()
+        if not settings.AGRO_AI_API_KEY:
+            return Response({"detail": "IA no configurada. Añade AGRO_AI_API_KEY al archivo .env del backend."}, status=503)
+        if not settings.AGRO_AI_URL.startswith("https://"):
+            return Response({"detail": "La URL del proveedor de IA debe usar HTTPS."}, status=503)
+        strategy = request.data.get("crops")
+        if not isinstance(strategy, list) or not 1 <= len(strategy) <= 12 or any(not isinstance(name, str) or len(name) > 120 for name in strategy):
+            raise ValidationError({"crops": "Envía entre 1 y 12 nombres de cultivos."})
+        # Only non-private crop names and documented families leave the backend. No coordinates or history.
+        in_demo_region = parcel.country.upper() == "EC" and -4.4 <= parcel.latitude <= 0.5 and -79.2 <= parcel.longitude <= -77.5
+        crops = Crop.objects.filter(validated=True, country_code="EC", region="Sierra ecuatoriana") if in_demo_region else []
+        catalog = {c.name.lower(): c.family for c in crops}
+        context = [{"crop": name.strip(), "family": catalog.get(name.strip().lower(), "sin ficha")} for name in strategy]
+        try:
+            response = requests.post(
+                settings.AGRO_AI_URL,
+                headers={"Authorization": f"Bearer {settings.AGRO_AI_API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "model": settings.AGRO_AI_MODEL, "temperature": 0.2, "max_tokens": 500,
+                    "messages": [
+                        {"role": "system", "content": (
+                            "Eres una guía agronómica prudente en español. Explica únicamente diversidad de familias "
+                            "y dudas para un profesional. No inventes asociaciones comprobadas, eficacia contra plagas, "
+                            "rendimiento, clima ni bibliografía. No recomiendes pesticidas. Señala datos insuficientes "
+                            "y que ninguna combinación garantiza evitar enfermedades."
+                        )},
+                        {"role": "user", "content": f"Evalúa esta secuencia de cultivos y familias documentadas, sin inferir ubicación ni clima: {context!r}"},
+                    ],
+                },
+                timeout=(5, 25),
+            )
+            response.raise_for_status()
+            text = response.json()["choices"][0]["message"]["content"]
+            if not isinstance(text, str) or not text.strip():
+                raise ValueError("Respuesta vacía del proveedor.")
+        except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as exc:
+            return Response({"detail": f"El proveedor de IA no está disponible: {exc}"}, status=503)
+        return Response({
+            "review": text[:3000], "model": settings.AGRO_AI_MODEL,
+            "notice": "Texto generado por IA sin validación agronómica. No se enviaron coordenadas ni historial. Consulta un profesional antes de actuar.",
+        })
 
 
 class HistoryViewSet(viewsets.ModelViewSet):
