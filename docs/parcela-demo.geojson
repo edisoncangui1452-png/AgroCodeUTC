@@ -1,0 +1,17 @@
+{
+  "type": "Feature",
+  "properties": {
+    "name": "Parcela ilustrativa — Sierra ecuatoriana",
+    "notice": "Geometría de ejemplo; no representa una finca real."
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[
+      [-78.651, -1.671],
+      [-78.646, -1.671],
+      [-78.646, -1.667],
+      [-78.651, -1.667],
+      [-78.651, -1.671]
+    ]]
+  }
+}
