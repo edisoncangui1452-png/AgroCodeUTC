@@ -1,11 +1,13 @@
 from unittest.mock import patch
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import Analysis, Crop, CropHistory, Parcel
-from .services import PARAMETERS, monthly_summary, recommendations, validate_geometry
+from .services import PARAMETERS, get_dashboard_metrics, monthly_summary, recommendations, summarize_dashboard_month, validate_geometry
 
 POLYGON = {"type": "Polygon", "coordinates": [[[-78.65, -1.67], [-78.64, -1.67], [-78.64, -1.66], [-78.65, -1.66], [-78.65, -1.67]]]}
 
@@ -38,6 +40,7 @@ class ParcelTests(TestCase):
         self.assertEqual(self.client.get(f"/api/v1/parcels/{self.parcel.pk}/").status_code, 404)
         self.assertEqual(self.client.delete(f"/api/v1/parcels/{self.parcel.pk}/").status_code, 404)
         self.assertEqual(self.client.get(f"/api/v1/parcels/{self.parcel.pk}/climate/").status_code, 404)
+        self.assertEqual(self.client.get(f"/api/v1/parcels/{self.parcel.pk}/dashboard-metrics/").status_code, 404)
 
     def test_create_and_update_uses_server_area(self):
         payload = {"name": "Nueva", "country": "EC", "location": "Sierra ecuatoriana", "geometry": POLYGON, "area_ha": 999}
@@ -66,6 +69,59 @@ class ParcelTests(TestCase):
         self.assertEqual(monthly[0]["T2M_MIN"], -4)
         del data["PRECTOTCORR"]["20230131"]
         self.assertIsNone(monthly_summary(data, 2023, 2023)[0]["PRECTOTCORR"])
+
+    def test_dashboard_indicators_use_same_complete_month_and_distinct_sources(self):
+        days = [f"202502{day:02}" for day in range(1, 29)]
+        values = {
+            "T2M": {key: 17.3 for key in days},
+            "PRECTOTCORR": {key: 2 for key in days},
+            "GWETTOP": {key: 0.38 for key in days},
+            "T2M_MIN": {key: -1 if day < 4 else 2 for day, key in enumerate(days)},
+        }
+        result = summarize_dashboard_month(values, 2025, 2)
+        self.assertEqual(result["temperature_c"], 17.3)
+        self.assertEqual(result["precipitation_mm"], 56)
+        self.assertEqual(result["soil_wetness_index_percent"], 38)
+        self.assertEqual(result["observed_frost_percent"], 14)
+        del values["PRECTOTCORR"][days[0]]
+        values["GWETTOP"][days[1]] = -999
+        result = summarize_dashboard_month(values, 2025, 2)
+        self.assertIsNone(result["precipitation_mm"])
+        self.assertEqual(result["soil_wetness_index_percent"], 38)
+        values["GWETTOP"] = {}
+        self.assertIsNone(summarize_dashboard_month(values, 2025, 2)["soil_wetness_index_percent"])
+
+    @patch("core.views.get_dashboard_metrics")
+    def test_dashboard_metrics_only_for_owned_parcel(self, metrics):
+        metrics.return_value = {"period": "2025-02", "temperature_c": 17.3}
+        response = self.client.get(f"/api/v1/parcels/{self.parcel.pk}/dashboard-metrics/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["period"], "2025-02")
+        self.client.force_authenticate(self.bob)
+        self.assertEqual(self.client.get(f"/api/v1/parcels/{self.parcel.pk}/dashboard-metrics/").status_code, 404)
+
+    @patch("core.services.requests.Session")
+    def test_dashboard_metrics_are_cached_without_inventing_values(self, session_class):
+        last_day = timezone.now().date().replace(day=1) - timedelta(days=1)
+        readings = {
+            f"{last_day.year}{last_day.month:02}{day:02}": 0.4
+            for day in range(1, last_day.day + 1)
+        }
+        session_class.return_value.__enter__.return_value.get.return_value.json.return_value = {
+            "properties": {"parameter": {
+                "GWETTOP": readings,
+                "T2M": {key: 15 for key in readings},
+                "T2M_MIN": {key: 2 for key in readings},
+                "PRECTOTCORR": {key: 1 for key in readings},
+            }},
+        }
+        first = get_dashboard_metrics(self.parcel)
+        second = get_dashboard_metrics(self.parcel)
+        self.assertFalse(first["cached"])
+        self.assertTrue(second["cached"])
+        self.assertEqual(first["soil_wetness_index_percent"], 40)
+        self.assertEqual(first["precipitation_mm"], last_day.day)
+        session_class.return_value.__enter__.return_value.get.assert_called_once()
 
     @patch("core.views.get_climate")
     def test_climate_saves_only_own_analysis(self, get_climate):

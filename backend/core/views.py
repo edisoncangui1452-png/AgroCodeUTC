@@ -22,7 +22,7 @@ from .serializers import (
     AgronomistSerializer, AnalysisSerializer, CropSerializer, HistorySerializer,
     ParcelSerializer, ProfileSerializer, RegisterSerializer, UserSerializer,
 )
-from .services import UNITS, available_years, get_climate, historical_scenario, monthly_summary, recommendations
+from .services import UNITS, available_years, get_climate, get_dashboard_metrics, historical_scenario, monthly_summary, recommendations
 
 User = get_user_model()
 
@@ -200,6 +200,14 @@ class ParcelViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
+
+    @action(detail=True, methods=["get"], url_path="dashboard-metrics")
+    def dashboard_metrics(self, request, pk=None):
+        parcel = self.get_object()
+        try:
+            return Response(get_dashboard_metrics(parcel))
+        except (ValueError, requests.RequestException) as exc:
+            return Response({"detail": f"No fue posible obtener indicadores NASA: {exc}"}, status=503)
 
     @action(detail=True, methods=["get", "put"], url_path="profile")
     def profile(self, request, pk=None):

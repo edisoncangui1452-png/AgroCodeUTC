@@ -1,7 +1,9 @@
 import calendar
+from datetime import timedelta
 from statistics import mean, pstdev
 
 import requests
+from django.core.cache import cache
 from django.utils import timezone
 from pyproj import Geod
 from shapely.geometry import shape
@@ -17,6 +19,7 @@ UNITS = {
 }
 POWER_URL = "https://power.larc.nasa.gov/api/temporal/daily/point"
 GEOD = Geod(ellps="WGS84")
+DASHBOARD_PARAMETERS = ["T2M", "PRECTOTCORR", "GWETTOP", "T2M_MIN"]
 
 
 def validate_geometry(value):
@@ -84,6 +87,69 @@ def get_climate(parcel, start_year, end_year):
         },
     )
     return values, False, query.fetched_at
+
+
+def summarize_dashboard_month(values, year, month):
+    days = calendar.monthrange(year, month)[1]
+    readings = {}
+    coverage = {}
+    for parameter in DASHBOARD_PARAMETERS:
+        series = []
+        for day in range(1, days + 1):
+            value = values.get(parameter, {}).get(f"{year}{month:02}{day:02}")
+            if isinstance(value, (int, float)) and value > -900 and (
+                parameter != "GWETTOP" or 0 <= value <= 1
+            ) and (parameter != "PRECTOTCORR" or value >= 0):
+                series.append(float(value))
+        readings[parameter] = series
+        coverage[parameter] = len(series)
+    temperature = round(mean(readings["T2M"]), 1) if coverage["T2M"] >= days * 0.8 else None
+    rainfall = round(sum(readings["PRECTOTCORR"]), 1) if coverage["PRECTOTCORR"] == days else None
+    soil_index = round(mean(readings["GWETTOP"]) * 100) if coverage["GWETTOP"] >= days * 0.8 else None
+    frost = round(sum(value < 0 for value in readings["T2M_MIN"]) / coverage["T2M_MIN"] * 100) if coverage["T2M_MIN"] >= days * 0.8 else None
+    return {
+        "period": f"{year}-{month:02}", "days": days, "coverage": coverage,
+        "temperature_c": temperature, "precipitation_mm": rainfall,
+        "soil_wetness_index_percent": soil_index, "observed_frost_percent": frost,
+    }
+
+
+def get_dashboard_metrics(parcel):
+    """Only completed months; never convert missing data into a dashboard number."""
+    last_day = timezone.now().date().replace(day=1) - timedelta(days=1)
+    for _ in range(3):
+        year, month = last_day.year, last_day.month
+        key = f"dashboard:v1:{parcel.pk}:{parcel.latitude:.5f}:{parcel.longitude:.5f}:{year}:{month}"
+        cached = cache.get(key)
+        if cached is not None:
+            return {**cached, "cached": True}
+        params = {
+            "parameters": ",".join(DASHBOARD_PARAMETERS), "community": "AG",
+            "longitude": parcel.longitude, "latitude": parcel.latitude,
+            "start": f"{year}{month:02}01", "end": f"{year}{month:02}{last_day.day:02}",
+            "format": "JSON", "time-standard": "UTC",
+        }
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+        with requests.Session() as session:
+            session.mount("https://", HTTPAdapter(max_retries=Retry(total=1, backoff_factor=0.5, status_forcelist=[429, 502, 503, 504])))
+            response = session.get(POWER_URL, params=params, timeout=(5, 25))
+            response.raise_for_status()
+            payload = response.json()
+        values = payload.get("properties", {}).get("parameter", {})
+        if not isinstance(values, dict) or not all(isinstance(values.get(p), dict) for p in DASHBOARD_PARAMETERS):
+            raise ValueError("NASA POWER devolvió un formato inesperado para los indicadores.")
+        summary = summarize_dashboard_month(values, year, month)
+        if summary["temperature_c"] is not None and summary["precipitation_mm"] is not None:
+            result = {
+                **summary, "cached": False, "source": "NASA POWER daily point · AG",
+                "notice": "Estimaciones regionales. Humedad: índice superficial GWETTOP (0–1), no medición volumétrica de la finca. "
+                          "Heladas: porcentaje de días observados con T2M_MIN < 0 °C, no pronóstico de riesgo futuro.",
+            }
+            cache.set(key, result, 6 * 60 * 60)
+            return result
+        last_day = last_day.replace(day=1) - timedelta(days=1)
+    raise ValueError("No hay un mes calendario completo con datos suficientes en los últimos tres meses.")
 
 
 def monthly_summary(values, start_year, end_year):

@@ -41,6 +41,8 @@ Registra una cuenta, entra en **Mis parcelas**, importa `docs/parcela-demo.geojs
 
 Las migraciones cargan **15 fichas de FAO Ecocrop** con rangos generales documentados. Los resultados son *candidatos exploratorios*, **no recomendaciones locales validadas**. Cada ficha enlaza a su fuente; no se inventaron profesionales.
 
+En **Resumen**, el selector está dentro de la tarjeta del terreno. Cuatro indicadores compactos muestran el último mes completo disponible en NASA POWER: temperatura media, lluvia acumulada, índice superficial de humedad y frecuencia observada de heladas. No se interpretan como sensores de la finca ni como pronóstico.
+
 La búsqueda geográfica envía el texto consultado a Nominatim; la consulta climática envía a NASA el punto representativo del polígono. No se publican parcelas por la API. La recuperación de contraseña imprime el enlace en la consola del backend en desarrollo; para envío real configura SMTP en `.env`.
 
 ## Comprobaciones

@@ -17,6 +17,7 @@ Base: `/api/v1/`. JSON; sesiones Django con cookie HttpOnly. Para `POST`, `PUT`,
 | `parcels/` | GET, POST | `{name,country,location,geometry}`; código ISO 2 letras |
 | `parcels/{id}/` | GET, PATCH, DELETE | Solo propietario; superficie calculada en servidor |
 | `parcels/{id}/profile/` | GET, PUT | Perfil opcional |
+| `parcels/{id}/dashboard-metrics/` | GET | Último mes completo disponible: temperatura, lluvia, índice superficial de humedad y frecuencia observada de heladas; solo propietario |
 | `parcels/{id}/climate/` | GET, POST | `start_year,end_year` (query o JSON); POST guarda análisis; devuelve `crop_windows` por ciclos de 2, 3 y 6 meses |
 | `parcels/{id}/recommend/` | POST | Compara fichas regionales validadas; guarda resultado |
 | `parcels/{id}/rotations/` | POST | `{strategies:[{name,crops:[]},...]}`; tres estrategias |
