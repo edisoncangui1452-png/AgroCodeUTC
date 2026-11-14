@@ -1,5 +1,4 @@
 import calendar
-from datetime import date
 from statistics import mean, pstdev
 
 import requests
@@ -123,29 +122,66 @@ def historical_scenario(monthly):
 
 
 def recommendations(parcel, monthly):
-    country = parcel.country.strip().upper()
-    # Never silently extrapolate a regionally documented crop to another region.
-    crops = Crop.objects.filter(validated=True, country_code=country)
+    """Explore complete historical growth windows without treating annual rain as monthly water demand."""
+    if parcel.country.upper() != "EC" or not (-4.4 <= parcel.latitude <= 0.5 and -79.2 <= parcel.longitude <= -77.5):
+        return []
+    by_month = {(row["year"], row["month"]): row for row in monthly}
+    years = sorted({row["year"] for row in monthly})
+    annual_rain = [
+        round(sum(by_month[(year, month)]["PRECTOTCORR"] for month in range(1, 13)), 1)
+        for year in years
+        if all(by_month.get((year, month), {}).get("PRECTOTCORR") is not None for month in range(1, 13))
+    ]
     result = []
-    for crop in crops:
-        if crop.region.lower() not in (parcel.location or "").lower():
-            continue
-        compatible = []
-        for month in range(1, 13):
-            rows = [r for r in monthly if r["month"] == month and r["T2M"] is not None and r["PRECTOTCORR"] is not None]
-            if len(rows) < 2:
+    for crop in Crop.objects.filter(validated=True, country_code="EC", region="Sierra ecuatoriana"):
+        durations = {}
+        for target in (2, 3, 6):
+            if not (crop.cycle_days <= target * 30 <= (crop.max_cycle_days or crop.cycle_days)):
                 continue
-            temp = mean(r["T2M"] for r in rows)
-            rain = mean(r["PRECTOTCORR"] for r in rows)
-            if crop.min_temp_c <= temp <= crop.max_temp_c and (
-                crop.min_rain_mm is None or crop.min_rain_mm <= rain <= crop.max_rain_mm
-            ):
-                compatible.append(month)
-        if compatible:
+            compatible = []
+            for start_month in range(1, 13):
+                observed = []
+                for year in years:
+                    rows = [
+                        by_month.get((year + (start_month + offset - 1) // 12, (start_month + offset - 1) % 12 + 1))
+                        for offset in range(target)
+                    ]
+                    if any(not row or row["T2M"] is None or row["PRECTOTCORR"] is None for row in rows):
+                        continue
+                    observed.append({
+                        "year": year,
+                        "fits": all(crop.min_temp_c <= row["T2M"] <= crop.max_temp_c for row in rows),
+                        "rain_mm": round(sum(row["PRECTOTCORR"] for row in rows), 1),
+                    })
+                fits = sum(item["fits"] for item in observed)
+                if len(observed) >= 2 and fits >= 2:
+                    compatible.append({
+                        "start_month": start_month, "historical_matches": fits,
+                        "years_checked": len(observed),
+                        "observed_rain_mm": [item["rain_mm"] for item in observed],
+                    })
+            if compatible:
+                durations[str(target)] = compatible
+        if durations:
+            optimal_rain_years = sum(
+                crop.min_annual_rain_mm <= total <= crop.max_annual_rain_mm
+                for total in annual_rain
+            ) if crop.min_annual_rain_mm is not None and crop.max_annual_rain_mm is not None else None
+            rain_context = (
+                f"Lluvia anual observada: {min(annual_rain):.0f}–{max(annual_rain):.0f} mm; "
+                f"rango óptimo anual FAO: {crop.min_annual_rain_mm:.0f}–{crop.max_annual_rain_mm:.0f} mm. "
+                f"{optimal_rain_years}/{len(annual_rain)} años en ese rango."
+                if annual_rain and crop.min_annual_rain_mm is not None and crop.max_annual_rain_mm is not None
+                else "Sin comparación anual de lluvia suficiente."
+            )
             result.append({
-                "crop": crop.name, "family": crop.family, "months": compatible, "region": crop.region,
-                "cycle_days": crop.cycle_days, "source": crop.source,
-                "reason": "En estos meses, los promedios históricos de temperatura y lluvia coinciden con los rangos de la ficha regional.",
-                "risks": "Tres años son una muestra pequeña. Confirma suelo, agua, altitud y calendario con un profesional.",
+                "crop": crop.name, "family": crop.family, "region": crop.region,
+                "cycle_days": crop.cycle_days, "max_cycle_days": crop.max_cycle_days,
+                "durations": durations, "months": sorted({w["start_month"] for windows in durations.values() for w in windows}),
+                "source": crop.source, "regional_validated": crop.regional_validated,
+                "rain_context": rain_context, "rain_optimal_years": optimal_rain_years,
+                "reason": "La temperatura media de todos los meses del ciclo coincide con el rango óptimo FAO en al menos dos temporadas históricas completas.",
+                "risks": "FAO aporta rangos generales, no validación local ni requerimiento hídrico del ciclo. "
+                         "La lluvia se informa por separado; verifica suelo, agua, altitud y calendario local antes de sembrar.",
             })
     return result

@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import Analysis, Crop, Parcel
+from .models import Analysis, Crop, CropHistory, Parcel
 from .services import PARAMETERS, monthly_summary, recommendations, validate_geometry
 
 POLYGON = {"type": "Polygon", "coordinates": [[[-78.65, -1.67], [-78.64, -1.67], [-78.64, -1.66], [-78.65, -1.66], [-78.65, -1.67]]]}
@@ -77,10 +77,46 @@ class ParcelTests(TestCase):
         self.assertEqual(self.client.get("/api/v1/analyses/").data, [])
 
     def test_unsupported_region_not_recommended(self):
-        Crop.objects.create(name="Prueba", family="Fabaceae", region="Sierra ecuatoriana", country_code="EC", min_temp_c=5, max_temp_c=30, cycle_days=100, validated=True)
-        self.parcel.location = "Costa ecuatoriana"
-        months = [{"month": n, "T2M": 15, "PRECTOTCORR": 50} for n in range(1, 13) for _ in range(3)]
+        self.parcel.longitude = -80.0
+        months = [{"year": year, "month": n, "T2M": 15, "PRECTOTCORR": 50} for year in range(2023, 2026) for n in range(1, 13)]
         self.assertEqual(recommendations(self.parcel, months), [])
+
+    def test_recommendations_check_all_months_of_growth(self):
+        self.assertEqual(Crop.objects.filter(source__contains="ecocrop.apps.fao.org").count(), 15)
+        months = [{"year": year, "month": n, "T2M": 18, "PRECTOTCORR": 50} for year in range(2023, 2026) for n in range(1, 13)]
+        candidates = recommendations(self.parcel, months)
+        lettuce = next(c for c in candidates if c["crop"] == "Lechuga")
+        self.assertIn("2", lettuce["durations"])
+        self.assertFalse(lettuce["regional_validated"])
+        for row in months:
+            if row["month"] == 2:
+                row["T2M"] = 35
+        lettuce = next(c for c in recommendations(self.parcel, months) if c["crop"] == "Lechuga")
+        self.assertNotIn(1, [w["start_month"] for w in lettuce["durations"]["2"]])
+        self.assertNotIn(2, [w["start_month"] for w in lettuce["durations"]["2"]])
+
+    def test_history_and_analyses_filter_by_owned_parcel(self):
+        other = Parcel.objects.create(owner=self.alice, name="Otra", country="EC", location="Sierra",
+                                      geometry=POLYGON, latitude=-1.6, longitude=-78.6, area_ha=100)
+        CropHistory.objects.create(parcel=self.parcel, crop_name="Papa", planted_on="2024-01-01")
+        CropHistory.objects.create(parcel=other, crop_name="Haba", planted_on="2025-01-01")
+        Analysis.objects.create(owner=self.alice, parcel=self.parcel, kind="climate", title="Clima", result={})
+        Analysis.objects.create(owner=self.alice, parcel=other, kind="climate", title="Otro", result={})
+        self.assertEqual(len(self.client.get(f"/api/v1/history/?parcel={self.parcel.pk}").data), 1)
+        self.assertEqual(len(self.client.get(f"/api/v1/analyses/?parcel={self.parcel.pk}").data), 1)
+        self.client.force_authenticate(self.bob)
+        self.assertEqual(self.client.get(f"/api/v1/history/?parcel={self.parcel.pk}").data, [])
+
+    def test_agronomic_profile_accepts_soil_choices_and_binary_irrigation(self):
+        response = self.client.put(f"/api/v1/parcels/{self.parcel.pk}/profile/", {
+            "soil_texture": "Franco arcillo-limoso", "irrigation": "Sí",
+        }, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn("water_availability", response.data)
+        invalid = self.client.put(f"/api/v1/parcels/{self.parcel.pk}/profile/", {
+            "soil_texture": "desconocido", "irrigation": "Tal vez",
+        }, format="json")
+        self.assertEqual(invalid.status_code, 400)
 
 
 class AuthTests(TestCase):
