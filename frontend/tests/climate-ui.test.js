@@ -367,6 +367,14 @@ test('parcel creation actions use the shared brand primary token in both themes'
   assert.ok(contrastRatio('#ffffff', '#28583a') >= 4.5)
 })
 
+test('parcel map renders its declared view controller without an unresolved component', () => {
+  const root = resolve(process.cwd(), '..')
+  const parcelMap = readFileSync(join(root, 'frontend/src/components/ParcelMap.jsx'), 'utf8')
+  assert.match(parcelMap, /function ViewController\(/)
+  assert.match(parcelMap, /<ViewController geometry=\{geometry\} focus=\{focus\} \/>/)
+  assert.doesNotMatch(parcelMap, /<FlyTo\b/)
+})
+
 test('visual summary shows icons only for actual monthly values and labels missing data', () => {
   const html = render(React.createElement(ClimateVisualSummary, { result, language: 'es' }))
   assert.match(html, /data-climate-variable="T2M"/)

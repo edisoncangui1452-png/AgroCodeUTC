@@ -72,6 +72,6 @@ export default function ParcelMap({ geometry, onChange, point, onPoint, focus, s
     {satellite && <WMSTileLayer url="https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi" layers="MODIS_Terra_CorrectedReflectance_TrueColor" format="image/png" transparent opacity={0.85} time={date} attribution="NASA GIBS / MODIS Terra" />}
     {onChange ? <MapEditor geometry={geometry} onChange={onChange} onPoint={onPoint} /> : geometry?.coordinates && <Polygon positions={geometry.coordinates[0].map(([lon, lat]) => [lat, lon])} pathOptions={{ color: 'var(--map-field)', weight: 3 }} />}
     {point && !geometry && <Marker position={point} />}
-    <FlyTo point={point} />
+    <ViewController geometry={geometry} focus={focus} />
   </MapContainer>
 }

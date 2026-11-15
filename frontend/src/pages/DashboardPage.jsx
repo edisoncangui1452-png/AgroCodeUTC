@@ -21,7 +21,7 @@ function Metric({ icon: Icon, label, value, note }) {
 export function Dashboard() {
   const { user } = useAuth()
   const { parcels, loading } = useParcels()
-  const storageKey = `agrofisica:parcel:${user.id}`
+  const storageKey = `agrocodeutc:parcel:${user.id}`
   const [selected, setSelected] = useState(() => localStorage.getItem(storageKey) || '')
   const [analyses, setAnalyses] = useState([])
   const [metrics, setMetrics] = useState(null)

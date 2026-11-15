@@ -9,7 +9,7 @@ export default function HelpAssistant() {
   const [tab, setTab] = useState('guide')
   const [people, setPeople] = useState([])
   const [draft, setDraft] = useState('')
-  const [messages, setMessages] = useState([{ role: 'assistant', text: '¡Hola! Soy la guía de AgroFísica. Pregúntame cómo usar mapas, parcelas, clima, cultivos o tu historial.' }])
+  const [messages, setMessages] = useState([{ role: 'assistant', text: '¡Hola! Soy la guía de AgrocodeUTC. Pregúntame cómo usar mapas, parcelas, clima, cultivos o tu historial.' }])
   const endRef = useRef(null)
   useEffect(() => {
     if (open && tab === 'people') api.get('agronomists/').then(({ data }) => setPeople(data.results || data)).catch(() => {})
@@ -28,8 +28,8 @@ export default function HelpAssistant() {
     setDraft('')
   }
   return <div className="fixed bottom-5 right-5 z-[1200]">
-    {open && <section role="dialog" aria-label="Ayuda de AgroFísica" className="absolute bottom-16 right-0 flex h-[min(560px,75vh)] w-[min(370px,calc(100vw-32px))] flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-2xl">
-      <div className="flex items-center justify-between bg-ink p-4 text-white"><div><h3 className="font-display font-bold">Ayuda AgroFísica</h3><p className="text-xs text-white/75">Guía local de uso · sin envío de preguntas</p></div><button onClick={() => setOpen(false)} title="Cerrar ayuda" aria-label="Cerrar ayuda"><X size={19} /></button></div>
+    {open && <section role="dialog" aria-label="Ayuda de AgrocodeUTC" className="absolute bottom-16 right-0 flex h-[min(560px,75vh)] w-[min(370px,calc(100vw-32px))] flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-2xl">
+      <div className="flex items-center justify-between bg-ink p-4 text-white"><div><h3 className="font-display font-bold">Ayuda AgrocodeUTC</h3><p className="text-xs text-white/75">Guía local de uso · sin envío de preguntas</p></div><button onClick={() => setOpen(false)} title="Cerrar ayuda" aria-label="Cerrar ayuda"><X size={19} /></button></div>
       <div className="flex border-b border-line text-sm font-semibold"><button className={`flex flex-1 items-center justify-center gap-2 p-3 ${tab === 'guide' ? 'border-b-2 border-leaf text-leaf' : 'text-muted'}`} onClick={() => setTab('guide')}><MessageCircle size={16} /> Guía</button><button className={`flex flex-1 items-center justify-center gap-2 p-3 ${tab === 'people' ? 'border-b-2 border-leaf text-leaf' : 'text-muted'}`} onClick={() => setTab('people')}><UserRound size={16} /> Profesionales</button></div>
       {tab === 'guide' ? <>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 text-sm" aria-live="polite">{messages.map((message, i) => <div key={i} className={`max-w-[92%] rounded-xl p-3 ${message.role === 'user' ? 'ml-auto bg-leaf text-white' : 'bg-paper'}`}>{message.text}{message.path && <Link to={message.path} onClick={() => setOpen(false)} className="mt-2 block font-semibold underline">Ir a esa sección →</Link>}</div>)}<div ref={endRef} /></div>

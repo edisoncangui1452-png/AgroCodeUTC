@@ -11,9 +11,16 @@ DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
 if not DEBUG and SECRET_KEY == "development-only-change-before-deployment":
     raise ImproperlyConfigured("Configura DJANGO_SECRET_KEY antes de iniciar en producción.")
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
-FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:5173").rstrip("/")
-CSRF_TRUSTED_ORIGINS = list({FRONTEND_ORIGIN, "http://localhost:5173", "http://127.0.0.1:5173"}) if DEBUG else [FRONTEND_ORIGIN]
-CORS_ALLOWED_ORIGINS = CSRF_TRUSTED_ORIGINS
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:5174").rstrip("/")
+trusted_origins = {
+    FRONTEND_ORIGIN,
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+}
+CSRF_TRUSTED_ORIGINS = sorted(trusted_origins) if DEBUG else [FRONTEND_ORIGIN]
+CORS_ALLOWED_ORIGINS = sorted(trusted_origins) if DEBUG else [FRONTEND_ORIGIN]
 CORS_ALLOW_CREDENTIALS = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
