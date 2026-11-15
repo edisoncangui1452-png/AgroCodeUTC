@@ -1,15 +1,9 @@
 import { useId, useState } from 'react'
 import { shortCycleCrops } from './simulatorOptions'
-
-export const stageLabels = {
-  siembra: 'Siembra',
-  germinacion: 'Germinación observada',
-  emergencia: 'Emergencia',
-  crecimiento_inicial: 'Crecimiento inicial',
-  desarrollo_vegetativo: 'Desarrollo vegetativo',
-  desarrollo_avanzado: 'Desarrollo avanzado',
-  posible_cosecha: 'Posible cosecha (observada)',
-}
+import { illustrationForPeriod, visualStageForPeriod } from './simulatorIllustration'
+import {
+  labelInformation, labelMissing, labelRisk, labelRiskStatus, labelStage, labelStageSource,
+} from './simulatorLabels'
 
 const stageSizes = {
   emergencia: [2, 0.42],
@@ -17,18 +11,6 @@ const stageSizes = {
   desarrollo_vegetativo: [4, 0.83],
   desarrollo_avanzado: [5, 1],
   posible_cosecha: [5, 1.08],
-}
-
-const riskLabels = {
-  calor: 'Posible calor',
-  falta_agua: 'Suelo seco registrado',
-  exceso_humedad: 'Encharcamiento registrado',
-}
-
-const informationLabels = {
-  forecast: 'Pronóstico meteorológico',
-  subseasonal_forecast: 'Escenario subestacional por semanas',
-  historical: 'Referencia histórica; no pronóstico',
 }
 
 const leafPaths = {
@@ -53,6 +35,7 @@ function LeafShape({ crop, index, color, droop }) {
 export function PlantSimulation2D({
   crop, stage = null, risks = [], informationType = 'forecast',
   isIllustrative = true, selectedPeriod = null, stageSource = 'no_determinada', missing = [],
+  displayMode = 'observed',
 }) {
   const titleId = useId()
   const descriptionId = useId()
@@ -66,27 +49,28 @@ export function PlantSimulation2D({
   const [leaves, size] = stageSizes[stage] || [0, 0]
   const leafColor = heat || dry ? '#9bad64' : '#419768'
   const soilColor = wet ? '#537478' : dry ? '#c5a079' : '#947e65'
-  const caption = limited ? 'Etapa no confirmada: se muestra un símbolo neutro, no una planta observada.'
-    : stageSource === 'observacion_confirmada' ? 'Etapa registrada en campo en esa fecha; la ilustración no es una fotografía.'
-      : 'Etapa orientativa basada en la última observación; no se confirma para este período.'
-  const type = informationLabels[informationType] || 'Tipo de información no disponible'
+  const caption = displayMode === 'illustrative' && !limited
+    ? 'Viñeta demostrativa: no representa una etapa observada ni una predicción del motor agrícola.'
+    : limited ? 'Etapa no confirmada: se muestra un símbolo neutro, no una planta observada.'
+      : labelStageSource(stageSource)
+  const type = labelInformation(informationType)
   const period = selectedPeriod?.period_start
     ? selectedPeriod.period_start === selectedPeriod.period_end
       ? selectedPeriod.period_start
       : `${selectedPeriod.period_start} al ${selectedPeriod.period_end}`
     : null
 
-  return <figure className="plant-2d rounded-xl border border-line bg-white p-4 sm:p-5" data-crop={crop} data-stage={limited ? 'no_confirmada' : stage} data-risks={codes.join(',')}>
+  return <figure className="plant-2d rounded-xl border border-line bg-white p-4 sm:p-5" data-crop={crop} data-stage={limited ? 'no_confirmada' : stage} data-mode={displayMode} data-risks={codes.join(',')}>
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div>
-        <h4 className="font-bold text-ink">{cropName} · {limited ? 'Etapa no confirmada' : stageLabels[stage] || 'Etapa no confirmada'}</h4>
+        <h4 className="font-bold text-ink">{cropName} · {limited ? 'Etapa no confirmada' : `${labelStage(stage)} (${displayMode === 'illustrative' ? 'ilustrativa' : 'observada'})`}</h4>
         <p className="text-xs text-muted">{type}{period ? ` · ${period}` : ''}</p>
       </div>
       <span className="rounded-full border border-line bg-paper px-2 py-1 text-xs font-semibold">Ilustración 2D</span>
     </div>
     <svg className="plant-2d-canvas mt-4 w-full rounded-xl" viewBox="0 0 320 260" role="img" aria-labelledby={`${titleId} ${descriptionId}`}>
-      <title id={titleId}>{`Ilustración de ${cropName}: ${limited ? 'etapa no confirmada' : stageLabels[stage] || 'etapa no confirmada'}`}</title>
-      <desc id={descriptionId}>{`${type}. ${caption} ${codes.length ? `Indicadores: ${codes.map(code => riskLabels[code] || code).join(', ')}.` : 'Sin alertas activas identificadas.'}`}</desc>
+      <title id={titleId}>{`Ilustración de ${cropName}: ${limited ? 'etapa no confirmada' : labelStage(stage) + (displayMode === 'illustrative' ? ' ilustrativa' : ' observada')}`}</title>
+      <desc id={descriptionId}>{`${type}. ${caption} ${codes.length ? `Indicadores: ${codes.map(labelRisk).join(', ')}.` : 'Sin alertas activas identificadas.'}`}</desc>
       <rect width="320" height="260" rx="16" fill="#edf7ef" />
       <circle cx="267" cy="42" r="24" fill={heat ? '#f6b66d' : '#fff6ce'} opacity=".8" />
       <path d="M 0 188 Q 80 181 160 190 Q 240 180 320 188 L 320 260 L 0 260 Z" fill={soilColor} className="plant-2d-soil" />
@@ -119,24 +103,35 @@ export function PlantSimulation2D({
     <figcaption className="mt-3 space-y-2 text-xs leading-relaxed text-muted">
       <p>{caption}</p>
       {risks.length ? <ul className="flex flex-wrap gap-2" aria-label="Indicadores de riesgo">{risks.map((risk, index) =>
-        <li key={`${risk.code}-${index}`} className="rounded-full border border-line bg-paper px-2 py-1">{riskLabels[risk.code] || risk.code} · {risk.status === 'antecedente_no_reconfirmado' ? 'antecedente, no confirmado ahora' : risk.status === 'posible' ? 'posible' : 'observado en fecha'}</li>)}</ul>
+        <li key={`${risk.code}-${index}`} className="rounded-full border border-line bg-paper px-2 py-1">{labelRisk(risk.code)} · {labelRiskStatus(risk.status)}</li>)}</ul>
         : <p>Sin alertas activas identificadas; esto no confirma condiciones favorables.</p>}
-      {missing.length > 0 && <p>Información incompleta: {missing.join(', ')}. Verifique en campo.</p>}
-      {isIllustrative && <p>Visualización 2D ilustrativa basada en el estado comunicado por el simulador. No representa una observación directa de la parcela ni diagnostica enfermedades.</p>}
+      {missing.length > 0 && <p>Información incompleta: {missing.map(labelMissing).join(', ')}. Verifique en campo.</p>}
+      {isIllustrative && <p>Visualización 2D ilustrativa, no fotografía de la parcela. No infiere mortalidad ni diagnostica enfermedades.</p>}
     </figcaption>
   </figure>
 }
 
 export function SimulationVisualPanel({ result }) {
   const [selectedKey, setSelectedKey] = useState(null)
+  const [displayMode, setDisplayMode] = useState('observed')
   const rows = result.results || []
   const selected = rows.find(row => row.period_start === selectedKey) || rows[0] || null
   const weekly = result.weather.resolution === 'weekly'
   const historical = result.weather.information_type === 'historical'
-  const visualization = selected || { stage: null, stage_source: 'no_determinada', risks: [], missing: result.missing || [] }
+  const demonstration = illustrationForPeriod(result, selected)
+  const stage = visualStageForPeriod(result, selected, displayMode)
+  const age = selected?.days_since_sowing
+  const observedStage = result.initial_state?.stage
+  const observationDate = result.initial_state?.observed_on
 
   return <section className="rounded-xl border border-line bg-paper p-3 sm:p-4" aria-label="Visualización 2D del cultivo">
     <h4 className="mb-2 font-bold">Evolución visual por {historical ? 'referencia' : weekly ? 'semana' : 'día'}</h4>
+    <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Modo de visualización">
+      <button type="button" aria-pressed={displayMode === 'observed'} onClick={() => setDisplayMode('observed')}
+        className={`rounded-lg border px-3 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-leaf ${displayMode === 'observed' ? 'border-leaf bg-mint text-ink' : 'border-line bg-white text-muted'}`}>Estado observado</button>
+      <button type="button" aria-pressed={displayMode === 'illustrative'} onClick={() => setDisplayMode('illustrative')}
+        className={`rounded-lg border px-3 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-leaf ${displayMode === 'illustrative' ? 'border-leaf bg-mint text-ink' : 'border-line bg-white text-muted'}`}>Evolución ilustrativa</button>
+    </div>
     {historical ? <p className="mb-3 text-sm text-muted">Solo hay referencia histórica. No se dibuja una trayectoria futura del cultivo.</p>
       : <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label={weekly ? 'Seleccionar semana del escenario' : 'Seleccionar día del pronóstico'}>
         {rows.map((row, index) => <button key={row.period_start} type="button" aria-pressed={selected === row}
@@ -145,9 +140,15 @@ export function SimulationVisualPanel({ result }) {
           {weekly ? `Semana ${index + 1} · ${row.period_start} al ${row.period_end}` : `Día ${index + 1} · ${row.period_start}`}
         </button>)}
       </div>}
-    <PlantSimulation2D crop={result.crop.id} stage={historical ? null : visualization.stage}
-      stageSource={visualization.stage_source} risks={historical ? [] : visualization.risks}
-      missing={visualization.missing} informationType={result.weather.information_type}
-      selectedPeriod={historical ? null : selected} isIllustrative />
+    <div className="mb-3 space-y-1 text-sm text-muted">
+      <p><strong className="text-ink">Edad desde la siembra:</strong> {age ? weekly ? `${age.start}–${age.end} días en este bloque` : `${age.end} días` : 'sin período futuro disponible'}.</p>
+      <p><strong className="text-ink">Última etapa observada:</strong> {observedStage ? `${labelStage(observedStage)} (${observationDate || 'fecha no disponible'})` : 'ninguna registrada'}.</p>
+      <p>{displayMode === 'illustrative' ? demonstration.reason : selected ? labelStageSource(selected.stage_source) : 'Sin resultados futuros para confirmar una etapa.'}</p>
+    </div>
+    <PlantSimulation2D crop={result.crop.id} stage={stage} displayMode={displayMode}
+      stageSource={displayMode === 'illustrative' ? 'demostrativo' : selected?.stage_source}
+      risks={historical ? [] : selected?.risks || []} missing={selected?.missing || result.missing || []}
+      informationType={result.weather.information_type} selectedPeriod={historical ? null : selected} isIllustrative />
+    <p className="mt-3 text-xs leading-relaxed text-muted">Esta ilustración muestra una evolución orientativa del cultivo. No representa un crecimiento confirmado ni garantiza la fecha de cosecha. {result.crop.sources?.length ? <>Fuente agronómica: {result.crop.sources.map(source => <a key={source} href={source} target="_blank" rel="noreferrer" className="ml-1 underline">Consultar referencia</a>)}. </> : 'Sin referencias agronómicas disponibles. '}La escala gráfica no es un modelo fenológico validado; las alertas meteorológicas tampoco diagnostican enfermedades.</p>
   </section>
 }

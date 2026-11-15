@@ -4,6 +4,10 @@ import { FlaskConical, MapPinned, Sprout } from 'lucide-react'
 import { api, errorMessage } from '../api'
 import { Empty, Heading, ParcelSelect, useParcels } from './shared'
 import { SimulationVisualPanel } from './PlantSimulation2D'
+import {
+  labelCondition, labelInformation, labelMissing, labelRisk, labelRiskStatus, labelStage,
+  labelStageSource, labelWarning,
+} from './simulatorLabels'
 import { fertilizerSlots, observationDays, shortCycleCrops } from './simulatorOptions'
 
 export function SimulatorPage() {
@@ -181,15 +185,15 @@ export function SimulatorPage() {
           {simulation && <p className="mt-3 text-xs text-muted">Configuración guardada #{simulation.id}; fecha de siembra y observaciones se conservan al actualizar el pronóstico.</p>}
           {result && <section role="status" className="notice mt-5 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-bold">Evaluación parcial: {result.crop.name}</h3><button className="button button-dark" type="button" disabled={simulationBusy} onClick={async () => { setSimulationBusy(true); setSimulationError(''); try { await runEvaluation(simulation, true); loadWeather() } catch (error) { setSimulationError(errorMessage(error)) } finally { setSimulationBusy(false) } }}>Actualizar pronóstico y evaluación</button></div>
-            <p>Siembra: {result.planted_on} · {result.horizon_days} días · {result.weather.information_type} · Etapa: {result.stage || 'no confirmada'}</p>
+            <p>Siembra: {result.planted_on} · {result.horizon_days} días · {labelInformation(result.weather.information_type)} · Última etapa registrada: {result.initial_state?.stage ? labelStage(result.initial_state.stage) : 'no disponible'} (no confirma los períodos futuros).</p>
             <p>Densidad: {result.quantity.density_per_m2} {result.quantity.type === 'seeds' ? 'semillas' : 'plantas establecidas'}/m² · Plantas observadas: {result.quantity.observed_plants ?? 'sin dato'} · Cosechables: pendiente.</p>
             {result.indicative_harvest_window && <p>Referencia externa de cosecha (no confirmada localmente): {result.indicative_harvest_window.from} a {result.indicative_harvest_window.to}.</p>}
             <p>{result.qualitative_assessment}</p>
             <p>Incertidumbre meteorológica: {result.uncertainty.weather}. Modelo agrícola: {result.uncertainty.crop_model}</p>
             <SimulationVisualPanel result={result} />
-            <div className="grid gap-2 md:grid-cols-2">{result.results.map(row => <article key={row.period_start} className="rounded-lg border border-line bg-paper p-3 text-sm"><strong>{row.period_start === row.period_end ? row.period_start : `${row.period_start} al ${row.period_end}`}</strong><p>Etapa: {row.stage || 'no confirmada'} ({row.stage_source}) · días desde siembra: {row.days_since_sowing.start}–{row.days_since_sowing.end}</p><p>Temperatura: {row.thermal.status} · Agua: {row.water.status} · Humedad: {row.humidity.status} · Radiación: {row.radiation.status}</p><p>Riesgos: {row.risks.map(risk => `${risk.code} (${risk.status})`).join(', ') || 'no identificados con datos disponibles'}.</p>{row.partial_sowing_period && <p>Semana parcialmente anterior a la siembra; no se atribuye clima diario.</p>}{row.meteorological_uncertainty && <p>Dispersión de escenarios meteorológicos disponible; ver panel meteorológico.</p>}{row.missing.length > 0 && <p>Sin dato: {row.missing.join(', ')}</p>}</article>)}</div>
+            <div className="grid gap-2 md:grid-cols-2">{result.results.map(row => <article key={row.period_start} className="rounded-lg border border-line bg-paper p-3 text-sm"><strong>{row.period_start === row.period_end ? row.period_start : `${row.period_start} al ${row.period_end}`}</strong><p>Etapa registrada: {row.stage ? labelStage(row.stage) : 'no confirmada'} · {labelStageSource(row.stage_source)} · Edad desde siembra: {row.days_since_sowing.start}–{row.days_since_sowing.end} días.</p><p>Condición térmica: {labelCondition(row.thermal.status)} · Agua: {labelCondition(row.water.status)}</p><p>Humedad: {labelCondition(row.humidity.status)} · Radiación: {labelCondition(row.radiation.status)}</p><p>Advertencias: {row.risks.map(risk => `${labelRisk(risk.code)} (${labelRiskStatus(risk.status)})`).join(', ') || 'sin alertas identificadas con los datos disponibles; no indica condiciones óptimas'}.</p>{row.partial_sowing_period && <p>Semana parcialmente anterior a la siembra; no se atribuye clima diario.</p>}{row.meteorological_uncertainty && <p>Dispersión de escenarios meteorológicos disponible; ver panel meteorológico.</p>}{row.missing.length > 0 && <p>Sin dato: {row.missing.map(labelMissing).join(', ')}</p>}</article>)}</div>
             {result.results.length === 0 && <p>Solo referencia climática histórica: no se proyecta el cultivo con esos datos.</p>}
-            <ul className="list-disc pl-5 text-xs">{result.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
+            <ul className="list-disc pl-5 text-xs">{result.warnings.map(warning => <li key={warning}>{labelWarning(warning)}</li>)}</ul>
             <p className="text-xs">Fuentes: {result.crop.sources.map(source => <a className="mr-3 underline" href={source} key={source} target="_blank" rel="noreferrer">Ficha agronómica</a>)}</p>
           </section>}
         </section>
@@ -224,11 +228,7 @@ export function SimulatorPage() {
                 <strong>{weather.information_type === 'historical' ? 'Dispersión histórica (no pronóstico)' : 'Escenarios entre miembros (no intervalo de confianza)'}</strong>
                 {Object.entries(row.uncertainty).map(([key, interval]) => <p key={key} className="mt-1">{key === 'precipitation_mm' ? 'Precipitación' : 'Temperatura media'}: {interval.min ?? interval.p10}–{interval.max ?? interval.p90} {weather.units[key]}{interval.members ? ` · ${interval.members} miembros` : ''}</p>)}
               </div>}
-              {row.missing.length > 0 && <p className="mt-3 text-xs text-muted">Variables sin dato: {row.missing.map(key => ({
-                temperature_min_c: 'temperatura mínima', temperature_mean_c: 'temperatura media', temperature_max_c: 'temperatura máxima',
-                precipitation_mm: 'precipitación', relative_humidity_air_percent: 'humedad del aire',
-                solar_radiation_mj_m2: 'radiación solar', soil_moisture_model_percent: 'humedad del suelo',
-              })[key]).join(', ')}.</p>}
+              {row.missing.length > 0 && <p className="mt-3 text-xs text-muted">Variables sin dato: {row.missing.map(labelMissing).join(', ')}.</p>}
             </article>)}</div>
             <p className="mt-4 text-xs text-muted">La humedad relativa del aire es distinta de la humedad volumétrica del suelo estimada por el modelo. Fuente meteorológica: <a href="https://open-meteo.com/" target="_blank" rel="noreferrer" className="underline">Open-Meteo</a> y ECMWF; la referencia histórica, cuando aparece, es NASA POWER.</p>
           </div>}
