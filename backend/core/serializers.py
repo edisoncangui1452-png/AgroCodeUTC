@@ -59,9 +59,28 @@ class ParcelSerializer(serializers.ModelSerializer):
 
 
 class ProfileSerializer(serializers.ModelSerializer):
+    SOIL_TEXTURES = {
+        "Arenoso", "Arenoso franco", "Franco arenoso", "Franco", "Franco limoso", "Limoso",
+        "Franco arcillo-arenoso", "Franco arcilloso", "Franco arcillo-limoso", "Arcillo-arenoso",
+        "Arcillo-limoso",
+    }
+
     class Meta:
         model = AgronomicProfile
-        exclude = ["parcel"]
+        fields = [
+            "id", "current_crop", "soil_texture", "organic_matter", "irrigation",
+            "cultivated_area_ha", "constraints", "objectives", "notes",
+        ]
+
+    def validate_soil_texture(self, value):
+        if value and value not in self.SOIL_TEXTURES:
+            raise serializers.ValidationError("Selecciona una textura de suelo de la lista.")
+        return value
+
+    def validate_irrigation(self, value):
+        if value not in ("", "Sí", "No"):
+            raise serializers.ValidationError("El riego debe indicarse como Sí, No o No lo sé.")
+        return value
 
 
 class HistorySerializer(serializers.ModelSerializer):

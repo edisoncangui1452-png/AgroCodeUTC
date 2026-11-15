@@ -46,20 +46,28 @@ function MapEditor({ geometry, onChange, onPoint }) {
     if (geometry?.type === 'Polygon') {
       const geo = L.geoJSON({ type: 'Feature', properties: {}, geometry }, { style: { color: 'var(--map-field)', weight: 3, fillOpacity: 0.15 } })
       geo.eachLayer(l => layer.current?.addLayer(l))
-      map.fitBounds(geo.getBounds(), { maxZoom: 14, padding: [30, 30] })
     }
-  }, [geometry, map])
+  }, [geometry])
   return null
 }
 
-function FlyTo({ point }) {
+function ViewController({ geometry, focus }) {
   const map = useMap()
-  useEffect(() => { if (point) map.flyTo(point, 12) }, [point, map])
+  useEffect(() => {
+    if (focus?.bounds) {
+      map.fitBounds(focus.bounds, { padding: [24, 24], maxZoom: focus.maxZoom || 16, animate: true })
+    } else if (focus?.center) {
+      map.flyTo(focus.center, focus.zoom || 15)
+    } else if (geometry?.type === 'Polygon') {
+      const bounds = L.geoJSON({ type: 'Feature', properties: {}, geometry }).getBounds()
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [35, 35], maxZoom: 18, animate: true })
+    }
+  }, [geometry, focus, map])
   return null
 }
 
-export default function ParcelMap({ geometry, onChange, point, onPoint, satellite = false, date }) {
-  return <MapContainer center={point || [-1.4, -78.5]} zoom={point ? 12 : 6} className="h-full w-full" scrollWheelZoom>
+export default function ParcelMap({ geometry, onChange, point, onPoint, focus, searchMarker, satellite = false, date }) {
+  return <MapContainer center={focus?.center || point || [-1.4, -78.5]} zoom={point ? 15 : 6} minZoom={3} className="h-full w-full" scrollWheelZoom>
     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' />
     {satellite && <WMSTileLayer url="https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi" layers="MODIS_Terra_CorrectedReflectance_TrueColor" format="image/png" transparent opacity={0.85} time={date} attribution="NASA GIBS / MODIS Terra" />}
     {onChange ? <MapEditor geometry={geometry} onChange={onChange} onPoint={onPoint} /> : geometry?.coordinates && <Polygon positions={geometry.coordinates[0].map(([lon, lat]) => [lat, lon])} pathOptions={{ color: 'var(--map-field)', weight: 3 }} />}

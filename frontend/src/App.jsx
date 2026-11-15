@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { Link, Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { ArrowRight, ChartNoAxesCombined, ChevronRight, CircleHelp, CloudSun, Database, Globe2, Leaf, LogOut, MapPinned, Menu, ShieldCheck, Sprout, X } from 'lucide-react'
-import { api, errorMessage } from './api'
+import { ArrowRight, ChartNoAxesCombined, ChevronRight, CloudSun, Database, Globe2, Leaf, LogOut, MapPinned, Menu, ShieldCheck, Sprout } from 'lucide-react'
+import { api } from './api'
 import { AuthPages, ProfilePage } from './pages/Auth'
 import { Dashboard, ParcelsPage, ClimatePage, AgriculturePage, HistoryPage } from './pages/Workspace'
 import { PreferenceControls, PreferencesProvider, usePreferences } from './preferences'
@@ -33,13 +33,6 @@ function Landing() {
       <section id="tecnologia" className="bg-ink px-5 py-24 text-white md:px-10"><div className="mx-auto grid max-w-7xl gap-10 md:grid-cols-2 md:items-center"><div><div className="eyebrow border-white/20 text-white/70">02 / CIENCIA ABIERTA</div><h2 className="section-title mt-7">Información real.<br /><em>Decisiones humanas.</em></h2></div><div className="space-y-6 text-white/70"><p className="text-lg leading-relaxed">Usamos NASA POWER para datos climáticos históricos y, cuando corresponde, NASA GIBS para explorar imágenes satelitales. Los datos son regionales: no sustituyen mediciones en tu parcela.</p><div className="flex gap-3 border-t border-white/20 pt-6 text-sm"><ShieldCheck className="shrink-0" size={22} /><span>Las recomendaciones se basan únicamente en fichas regionales documentadas. Si faltan datos, te lo decimos.</span></div><Link to={user ? '/panel' : '/registro'} className="inline-flex items-center gap-2 font-bold text-white">Comenzar ahora <ArrowRight size={18} /></Link></div></div></section>
     </main><footer className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-10 text-sm text-muted md:px-10"><Logo /><span>AgrocodeUTC · Datos para cultivar mejores decisiones.</span></footer>
   </div>
-}
-
-function HelpBubble() {
-  const [open, setOpen] = useState(false)
-  const [people, setPeople] = useState([])
-  useEffect(() => { if (open) api.get('agronomists/').then(({ data }) => setPeople(data.results || data)).catch(() => {}) }, [open])
-  return <div className="fixed bottom-5 right-5 z-[1200]"><button className="flex h-12 w-12 items-center justify-center rounded-full bg-ink text-white shadow-xl" aria-label="Ayuda profesional" onClick={() => setOpen(!open)}>{open ? <X /> : <CircleHelp />}</button>{open && <div className="absolute bottom-16 right-0 w-[min(340px,calc(100vw-40px))] rounded-2xl border border-line bg-white p-5 shadow-2xl"><h3 className="font-display text-lg font-bold">¿Necesitas ayuda de un profesional agrónomo?</h3><p className="mt-2 text-sm text-muted">Ningún dato se comparte automáticamente. Puedes contactar a un profesional publicado.</p>{people.length ? people.map(p => <div key={p.id} className="mt-4 border-t border-line pt-3 text-sm"><strong>{p.name}</strong><div>{p.specialty} · {p.country}</div><div className="text-muted">{p.credentials}</div>{p.email && <a className="underline" href={`mailto:${p.email}`}>{p.email}</a>}</div>) : <p className="mt-4 text-sm text-muted">Aún no hay profesionales verificados publicados.</p>}</div>}</div>
 }
 
 function Workspace() {

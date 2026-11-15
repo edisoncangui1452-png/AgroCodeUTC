@@ -1,7 +1,9 @@
 from unittest.mock import patch
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import Analysis, Crop, Parcel
@@ -38,6 +40,81 @@ class ParcelTests(TestCase):
         self.assertEqual(self.client.get(f"/api/v1/parcels/{self.parcel.pk}/").status_code, 404)
         self.assertEqual(self.client.delete(f"/api/v1/parcels/{self.parcel.pk}/").status_code, 404)
         self.assertEqual(self.client.get(f"/api/v1/parcels/{self.parcel.pk}/climate/").status_code, 404)
+        self.assertEqual(self.client.get(f"/api/v1/parcels/{self.parcel.pk}/dashboard-metrics/").status_code, 404)
+        self.assertEqual(self.client.get(f"/api/v1/parcels/{self.parcel.pk}/historical-baseline/").status_code, 404)
+        self.assertEqual(self.client.post(f"/api/v1/parcels/{self.parcel.pk}/ai-rotation-review/", {"crops": ["Papa"]}, format="json").status_code, 404)
+
+    def test_monthly_baseline_uses_calendar_days_and_excludes_annual_aggregate(self):
+        values = {
+            "T2M": {}, "PRECTOTCORR": {}, "T2M_MIN": {},
+        }
+        for year in range(1983, 2026):
+            for month in range(1, 13):
+                key = f"{year}{month:02}"
+                values["T2M"][key] = 10
+                values["PRECTOTCORR"][key] = 2
+                values["T2M_MIN"][key] = -1 if year < 2003 else 2
+            values["T2M"][f"{year}13"] = 999
+        result = historical_baseline(values)
+        self.assertEqual(len(result), 12)
+        self.assertEqual(result[0]["temperature_c"]["median"], 10)
+        self.assertEqual(result[0]["rain_mm"]["median"], 62)
+        self.assertEqual(result[1]["rain_mm"]["p10"], 56)
+        self.assertEqual(result[1]["rain_mm"]["p90"], 58)
+        self.assertEqual(result[0]["monthly_mean_min_below_zero_frequency_percent"], 47)
+        values["PRECTOTCORR"] = {"198301": -999}
+        self.assertIsNone(historical_baseline(values)[0]["rain_mm"])
+        self.assertIsNone(historical_baseline({"T2M": {}, "PRECTOTCORR": {}, "T2M_MIN": {}})[0]["temperature_c"])
+
+    @patch("core.services.requests.Session")
+    def test_historical_baseline_endpoint_caches_by_location_and_protects_owner(self, session_class):
+        values = {p: {f"{year}{month:02}": 1 for year in range(1983, 2026) for month in range(1, 13)}
+                  for p in ("T2M", "PRECTOTCORR", "T2M_MIN")}
+        session_class.return_value.__enter__.return_value.get.return_value.json.return_value = {
+            "properties": {"parameter": values},
+        }
+        url = f"/api/v1/parcels/{self.parcel.pk}/historical-baseline/"
+        first = self.client.get(url)
+        second = self.client.get(url)
+        self.assertEqual(first.status_code, 200, first.data)
+        self.assertFalse(first.data["cached"])
+        self.assertTrue(second.data["cached"])
+        self.assertEqual(first.data["months"][0]["rain_mm"]["median"], 31)
+        self.assertEqual(ClimateQuery.objects.filter(source="NASA POWER monthly point").count(), 1)
+        session_class.return_value.__enter__.return_value.get.assert_called_once()
+        self.parcel.latitude += 1
+        self.parcel.save()
+        self.assertFalse(self.client.get(url).data["cached"])
+        self.client.force_authenticate(self.bob)
+        self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_ai_requires_configuration_and_authentication(self):
+        url = f"/api/v1/parcels/{self.parcel.pk}/ai-rotation-review/"
+        self.assertEqual(self.client.post(url, {"crops": ["Papa"]}, format="json").status_code, 503)
+        self.client.force_authenticate(user=None)
+        self.assertIn(self.client.get("/api/v1/ai/status/").status_code, (401, 403))
+
+    @override_settings(AGRO_AI_API_KEY="test-key", AGRO_AI_URL="https://example.org/v1/chat/completions", AGRO_AI_MODEL="test-model")
+    @patch("core.views.requests.post")
+    def test_ai_review_sends_only_crop_names_and_families(self, send):
+        send.return_value.json.return_value = {"choices": [{"message": {"content": "Revisa las familias con un profesional."}}]}
+        url = f"/api/v1/parcels/{self.parcel.pk}/ai-rotation-review/"
+        self.assertEqual(self.client.post(url, {"crops": []}, format="json").status_code, 400)
+        response = self.client.post(url, {"crops": ["Papa", "Haba"]}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        payload = send.call_args.kwargs["json"]
+        self.assertNotIn(str(self.parcel.latitude), str(payload))
+        self.assertNotIn(str(self.parcel.longitude), str(payload))
+        self.assertIn("Papa", str(payload))
+        self.assertEqual(send.call_args.kwargs["timeout"], (5, 25))
+
+    def test_rotation_guidance_flags_repeated_families(self):
+        url = f"/api/v1/parcels/{self.parcel.pk}/rotations/"
+        strategies = [{"crops": ["Papa", "Papa", "Haba"]}, {"crops": ["Sin ficha"]}, {"crops": []}]
+        response = self.client.post(url, {"strategies": strategies}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn("Papa y Papa", response.data["strategies"][0]["guidance"][0])
+        self.assertIn("Faltan fichas", response.data["strategies"][1]["guidance"][-1])
 
     def test_create_and_update_uses_server_area(self):
         payload = {"name": "Nueva", "country": "EC", "location": "Sierra ecuatoriana", "geometry": POLYGON, "area_ha": 999}
@@ -107,10 +184,46 @@ class ParcelTests(TestCase):
         self.assertNotIn("email", response.data)
 
     def test_unsupported_region_not_recommended(self):
-        Crop.objects.create(name="Prueba", family="Fabaceae", region="Sierra ecuatoriana", country_code="EC", min_temp_c=5, max_temp_c=30, cycle_days=100, validated=True)
-        self.parcel.location = "Costa ecuatoriana"
-        months = [{"month": n, "T2M": 15, "PRECTOTCORR": 50} for n in range(1, 13) for _ in range(3)]
+        self.parcel.longitude = -80.0
+        months = [{"year": year, "month": n, "T2M": 15, "PRECTOTCORR": 50} for year in range(2023, 2026) for n in range(1, 13)]
         self.assertEqual(recommendations(self.parcel, months), [])
+
+    def test_recommendations_check_all_months_of_growth(self):
+        self.assertEqual(Crop.objects.filter(source__contains="ecocrop.apps.fao.org").count(), 15)
+        months = [{"year": year, "month": n, "T2M": 18, "PRECTOTCORR": 50} for year in range(2023, 2026) for n in range(1, 13)]
+        candidates = recommendations(self.parcel, months)
+        lettuce = next(c for c in candidates if c["crop"] == "Lechuga")
+        self.assertIn("2", lettuce["durations"])
+        self.assertFalse(lettuce["regional_validated"])
+        for row in months:
+            if row["month"] == 2:
+                row["T2M"] = 35
+        lettuce = next(c for c in recommendations(self.parcel, months) if c["crop"] == "Lechuga")
+        self.assertNotIn(1, [w["start_month"] for w in lettuce["durations"]["2"]])
+        self.assertNotIn(2, [w["start_month"] for w in lettuce["durations"]["2"]])
+
+    def test_history_and_analyses_filter_by_owned_parcel(self):
+        other = Parcel.objects.create(owner=self.alice, name="Otra", country="EC", location="Sierra",
+                                      geometry=POLYGON, latitude=-1.6, longitude=-78.6, area_ha=100)
+        CropHistory.objects.create(parcel=self.parcel, crop_name="Papa", planted_on="2024-01-01")
+        CropHistory.objects.create(parcel=other, crop_name="Haba", planted_on="2025-01-01")
+        Analysis.objects.create(owner=self.alice, parcel=self.parcel, kind="climate", title="Clima", result={})
+        Analysis.objects.create(owner=self.alice, parcel=other, kind="climate", title="Otro", result={})
+        self.assertEqual(len(self.client.get(f"/api/v1/history/?parcel={self.parcel.pk}").data), 1)
+        self.assertEqual(len(self.client.get(f"/api/v1/analyses/?parcel={self.parcel.pk}").data), 1)
+        self.client.force_authenticate(self.bob)
+        self.assertEqual(self.client.get(f"/api/v1/history/?parcel={self.parcel.pk}").data, [])
+
+    def test_agronomic_profile_accepts_soil_choices_and_binary_irrigation(self):
+        response = self.client.put(f"/api/v1/parcels/{self.parcel.pk}/profile/", {
+            "soil_texture": "Franco arcillo-limoso", "irrigation": "Sí",
+        }, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn("water_availability", response.data)
+        invalid = self.client.put(f"/api/v1/parcels/{self.parcel.pk}/profile/", {
+            "soil_texture": "desconocido", "irrigation": "Tal vez",
+        }, format="json")
+        self.assertEqual(invalid.status_code, 400)
 
 
 class AuthTests(TestCase):
