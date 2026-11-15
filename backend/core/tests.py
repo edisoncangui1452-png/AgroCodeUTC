@@ -1,14 +1,16 @@
 from unittest.mock import patch
 from datetime import timedelta
 
+import json
+import requests
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from .models import Analysis, Crop, Parcel
-from .services import PARAMETERS, daily_coverage, monthly_summary, recommendations, validate_geometry
-
+from .models import AgronomicProfile, Analysis, ClimateQuery, Crop, CropHistory, Parcel
+from .ollama import OllamaUnavailable, SYSTEM_PROMPT, check_model, final_review, review_strategy
+from .services import PARAMETERS, daily_coverage, get_dashboard_metrics, get_historical_baseline, historical_baseline, monthly_summary, recommendations, summarize_dashboard_month, validate_geometry
 POLYGON = {"type": "Polygon", "coordinates": [[[-78.65, -1.67], [-78.64, -1.67], [-78.64, -1.66], [-78.65, -1.66], [-78.65, -1.67]]]}
 
 
@@ -88,25 +90,52 @@ class ParcelTests(TestCase):
         self.client.force_authenticate(self.bob)
         self.assertEqual(self.client.get(url).status_code, 404)
 
-    def test_ai_requires_configuration_and_authentication(self):
+    @patch("core.views.check_model", side_effect=OllamaUnavailable("Ollama no está ejecutándose."))
+    def test_ai_requires_local_service_and_authentication(self, check):
         url = f"/api/v1/parcels/{self.parcel.pk}/ai-rotation-review/"
-        self.assertEqual(self.client.post(url, {"crops": ["Papa"]}, format="json").status_code, 503)
+        self.assertEqual(self.client.get("/api/v1/ai/status/").data["configured"], False)
+        check.assert_called_once()
         self.client.force_authenticate(user=None)
         self.assertIn(self.client.get("/api/v1/ai/status/").status_code, (401, 403))
+        self.assertIn(self.client.post(url, {"crops": ["Papa"]}, format="json").status_code, (401, 403))
 
-    @override_settings(AGRO_AI_API_KEY="test-key", AGRO_AI_URL="https://example.org/v1/chat/completions", AGRO_AI_MODEL="test-model")
-    @patch("core.views.requests.post")
-    def test_ai_review_sends_only_crop_names_and_families(self, send):
-        send.return_value.json.return_value = {"choices": [{"message": {"content": "Revisa las familias con un profesional."}}]}
+    @override_settings(OLLAMA_MODEL="qwen3:4b")
+    @patch("core.views.check_model", return_value=True)
+    def test_ai_status_is_available_without_api_key(self, check):
+        response = self.client.get("/api/v1/ai/status/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"configured": True, "model": "qwen3:4b"})
+        check.assert_called_once()
+
+    @override_settings(OLLAMA_MODEL="qwen3:4b")
+    @patch("core.views.review_strategy", return_value="Revisa las familias con un profesional.")
+    def test_ai_review_sends_only_crop_names_and_families(self, review):
         url = f"/api/v1/parcels/{self.parcel.pk}/ai-rotation-review/"
         self.assertEqual(self.client.post(url, {"crops": []}, format="json").status_code, 400)
-        response = self.client.post(url, {"crops": ["Papa", "Haba"]}, format="json")
+        self.assertEqual(self.client.post(url, {"crops": ["  "]}, format="json").status_code, 400)
+        self.assertEqual(self.client.post(url, {"crops": ["Papa"], "strategy_name": "invento"}, format="json").status_code, 400)
+        AgronomicProfile.objects.create(parcel=self.parcel, soil_texture="Franco", irrigation="Sí", notes="dato privado")
+        response = self.client.post(url, {"crops": ["Papa", "Haba"], "strategy_name": "Estrategia B"}, format="json")
         self.assertEqual(response.status_code, 200, response.data)
-        payload = send.call_args.kwargs["json"]
+        self.assertEqual(set(response.data), {"review", "model", "notice"})
+        self.assertEqual(response.data["review"], "Revisa las familias con un profesional.")
+        self.assertEqual(response.data["model"], "qwen3:4b")
+        payload = review.call_args.args[0]
         self.assertNotIn(str(self.parcel.latitude), str(payload))
         self.assertNotIn(str(self.parcel.longitude), str(payload))
+        self.assertNotIn("dato privado", str(payload))
+        self.assertNotIn("Campo", str(payload))
         self.assertIn("Papa", str(payload))
-        self.assertEqual(send.call_args.kwargs["timeout"], (5, 25))
+        self.assertEqual(payload["strategy"], "Estrategia B")
+        self.assertEqual(payload["parcel_context"]["soil_texture"], "Franco")
+        self.assertEqual(payload["parcel_context"]["irrigation"], "Sí")
+        self.assertEqual(payload["plants"][0]["family"], Crop.objects.get(name="Papa").family)
+
+    @patch("core.views.review_strategy", side_effect=OllamaUnavailable("Ollama no responde."))
+    def test_ai_review_fails_clearly_without_disclosing_parcel(self, review):
+        response = self.client.post(f"/api/v1/parcels/{self.parcel.pk}/ai-rotation-review/", {"crops": ["Papa"]}, format="json")
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("Ollama no responde", response.data["detail"])
 
     def test_rotation_guidance_flags_repeated_families(self):
         url = f"/api/v1/parcels/{self.parcel.pk}/rotations/"
@@ -114,7 +143,7 @@ class ParcelTests(TestCase):
         response = self.client.post(url, {"strategies": strategies}, format="json")
         self.assertEqual(response.status_code, 200, response.data)
         self.assertIn("Papa y Papa", response.data["strategies"][0]["guidance"][0])
-        self.assertIn("Faltan fichas", response.data["strategies"][1]["guidance"][-1])
+        self.assertIn("Faltan fichas", " ".join(response.data["strategies"][1]["guidance"]))
 
     def test_create_and_update_uses_server_area(self):
         payload = {"name": "Nueva", "country": "EC", "location": "Sierra ecuatoriana", "geometry": POLYGON, "area_ha": 999}
@@ -202,6 +231,55 @@ class ParcelTests(TestCase):
         self.assertNotIn(1, [w["start_month"] for w in lettuce["durations"]["2"]])
         self.assertNotIn(2, [w["start_month"] for w in lettuce["durations"]["2"]])
 
+    def test_arveja_has_one_record_and_one_primary_duration(self):
+        self.assertEqual(Crop.objects.filter(name="Arveja").count(), 1)
+        monthly = [{"year": year, "month": month, "T2M": 18, "PRECTOTCORR": 75}
+                   for year in (2023, 2024, 2025) for month in range(1, 13)]
+        items = recommendations(self.parcel, monthly)
+        pea = next(item for item in items if item["crop"] == "Arveja")
+        self.assertEqual(set(pea["durations"]), {"2", "3"})
+        self.assertEqual(pea["primary_duration"], 3)
+        self.assertEqual((pea["cycle_days"], pea["max_cycle_days"]), (60, 140))
+        self.assertEqual(sum(item["id"] == pea["id"] for item in items), 1)
+
+    def test_partial_annual_rain_is_not_presented_as_fully_suitable(self):
+        monthly = [{"year": year, "month": month, "T2M": 18,
+                    "PRECTOTCORR": 70 if year == 2023 else 40}
+                   for year in (2023, 2024, 2025) for month in range(1, 13)]
+        pea = next(item for item in recommendations(self.parcel, monthly) if item["crop"] == "Arveja")
+        self.assertEqual(pea["rain_status"], "compatibilidad_parcial")
+        self.assertEqual(pea["rain_optimal_years"], 1)
+        self.assertIn("1/3 años", pea["rain_context"])
+
+    def test_rotation_considers_previous_crop_family_and_missing_water_data(self):
+        CropHistory.objects.create(parcel=self.parcel, crop_name="Arveja", planted_on="2025-02-01")
+        result = self.client.post(f"/api/v1/parcels/{self.parcel.pk}/rotations/", {
+            "strategies": [{"crops": ["Haba", "Papa"]}, {"crops": ["Arveja"]}, {"crops": []}],
+        }, format="json")
+        self.assertEqual(result.status_code, 200, result.data)
+        first = " ".join(result.data["strategies"][0]["guidance"])
+        second = " ".join(result.data["strategies"][1]["guidance"])
+        self.assertIn("comparte familia con el anterior", first)
+        self.assertIn("mismo cultivo anterior", second)
+        self.assertIn("Sin información de riego", first)
+        self.assertIn("Sin análisis de fertilidad", first)
+        self.assertIn("No hay clima diario histórico", first)
+
+    def test_rotation_uses_only_cached_complete_climate_for_annual_rain(self):
+        ClimateQuery.objects.create(
+            parcel=self.parcel, latitude=self.parcel.latitude, longitude=self.parcel.longitude,
+            start_year=2023, end_year=2023, source="NASA POWER daily point",
+            payload={name: {} for name in PARAMETERS},
+        )
+        # An incomplete daily series cannot become an annual rainfall comparison.
+        result = self.client.post(f"/api/v1/parcels/{self.parcel.pk}/rotations/", {
+            "strategies": [{"crops": ["Arveja"]}, {"crops": []}, {"crops": []}],
+        }, format="json")
+        self.assertEqual(result.status_code, 200, result.data)
+        text = " ".join(result.data["strategies"][0]["guidance"])
+        self.assertIn("sin mes de siembra", text)
+        self.assertIn("No hay años completos", text)
+
     def test_history_and_analyses_filter_by_owned_parcel(self):
         other = Parcel.objects.create(owner=self.alice, name="Otra", country="EC", location="Sierra",
                                       geometry=POLYGON, latitude=-1.6, longitude=-78.6, area_ha=100)
@@ -224,6 +302,105 @@ class ParcelTests(TestCase):
             "soil_texture": "desconocido", "irrigation": "Tal vez",
         }, format="json")
         self.assertEqual(invalid.status_code, 400)
+
+
+@override_settings(OLLAMA_BASE_URL="http://127.0.0.1:11434", OLLAMA_MODEL="qwen3:4b")
+class OllamaTests(TestCase):
+    @patch("core.ollama.requests.Session")
+    def test_model_is_available_and_status_is_preserved(self, session_class):
+        session = session_class.return_value.__enter__.return_value
+        session.request.return_value.is_redirect = False
+        session.request.return_value.json.return_value = {"models": [{"name": "qwen3:4b"}]}
+        self.assertTrue(check_model())
+        self.assertEqual(session.request.call_args.args, ("GET", "http://127.0.0.1:11434/api/tags"))
+        self.assertEqual(session.request.call_args.kwargs["timeout"], (3, 5))
+        self.assertFalse(session.request.call_args.kwargs["allow_redirects"])
+        self.assertFalse(session.trust_env)
+
+    @patch("core.ollama.requests.Session")
+    def test_qwen_receives_structured_strategy_and_returns_text(self, session_class):
+        session = session_class.return_value.__enter__.return_value
+        session.request.side_effect = [
+            type("Reply", (), {"is_redirect": False, "raise_for_status": lambda self: None,
+                               "json": lambda self: {"models": [{"name": "qwen3:4b"}]}})(),
+            type("Reply", (), {"is_redirect": False, "raise_for_status": lambda self: None,
+                               "json": lambda self: {"message": {"content": "  Revisión local en español.  "}}})(),
+        ]
+        context = {"strategy": "Estrategia A", "plants": [{"crop": "Papa", "family": "Solanaceae"}]}
+        self.assertEqual(review_strategy(context), "Revisión local en español.")
+        method, url = session.request.call_args.args
+        self.assertEqual((method, url), ("POST", "http://127.0.0.1:11434/api/chat"))
+        payload = session.request.call_args.kwargs["json"]
+        self.assertEqual(payload["model"], "qwen3:4b")
+        self.assertFalse(payload["stream"])
+        self.assertFalse(payload["think"])
+        self.assertEqual(session.request.call_args.kwargs["timeout"], (3, 240))
+        self.assertEqual(json.loads(payload["messages"][1]["content"].split("JSON):\n")[1].split("\n/no_think")[0]), context)
+        self.assertIn("español de Ecuador", payload["messages"][0]["content"])
+        self.assertIn("60 a 100 palabras", payload["messages"][0]["content"])
+        self.assertNotIn("Authorization", str(session.request.call_args.kwargs))
+
+    @patch("core.ollama.requests.Session")
+    def test_connection_error_and_timeout_are_clear(self, session_class):
+        session = session_class.return_value.__enter__.return_value
+        for error in (requests.ConnectionError("secret host"), requests.Timeout("secret host")):
+            session.request.side_effect = error
+            with self.assertRaisesRegex(OllamaUnavailable, "Ollama no está ejecutándose"):
+                check_model()
+
+    @patch("core.ollama.requests.Session")
+    def test_missing_model_and_malformed_response_are_clear(self, session_class):
+        session = session_class.return_value.__enter__.return_value
+        session.request.return_value.is_redirect = False
+        session.request.return_value.json.return_value = {"models": [{"name": "llama3:8b"}]}
+        with self.assertRaisesRegex(OllamaUnavailable, "ollama pull qwen3:4b"):
+            check_model()
+        session.request.return_value.json.return_value = {"models": None}
+        with self.assertRaisesRegex(OllamaUnavailable, "lista de modelos inválida"):
+            check_model()
+
+    @patch("core.ollama.requests.Session")
+    def test_empty_generation_is_not_returned_as_success(self, session_class):
+        session = session_class.return_value.__enter__.return_value
+        session.request.side_effect = [
+            type("Reply", (), {"is_redirect": False, "raise_for_status": lambda self: None,
+                               "json": lambda self: {"models": [{"name": "qwen3:4b"}]}})(),
+            type("Reply", (), {"is_redirect": False, "raise_for_status": lambda self: None,
+                               "json": lambda self: {"message": {"content": ""}}})(),
+        ]
+        with self.assertRaisesRegex(OllamaUnavailable, "no devolvió texto"):
+            review_strategy({"plants": []})
+
+    @override_settings(OLLAMA_BASE_URL="https://api.example.org")
+    @patch("core.ollama.requests.Session")
+    def test_external_url_is_rejected_without_request(self, session_class):
+        with self.assertRaisesRegex(OllamaUnavailable, "HTTP local"):
+            check_model()
+        session_class.return_value.__enter__.return_value.request.assert_not_called()
+
+    @patch("core.ollama.requests.Session")
+    def test_local_redirect_is_blocked(self, session_class):
+        session_class.return_value.__enter__.return_value.request.return_value.is_redirect = True
+        with self.assertRaisesRegex(OllamaUnavailable, "redirigir"):
+            check_model()
+
+    def test_prompt_is_clear_formal_and_accounts_for_missing_data(self):
+        for term in ("de usted", "60 a 100 palabras", "término técnico", "prueba de suelo",
+                     "humedad", "no es una medición", "Evaluación", "Recomendación", "Motivo",
+                     "no son pronósticos"):
+            self.assertIn(term, SYSTEM_PROMPT)
+
+    def test_final_answer_does_not_display_english_thinking_or_truncate(self):
+        answer = "Evaluación: Falta información sobre el riego. Recomendación: compruebe el agua disponible."
+        self.assertEqual(final_review({"message": {"content": "<think>Thinking in English</think>\n" + answer}}), answer)
+        with self.assertRaisesRegex(OllamaUnavailable, "español"):
+            final_review({"message": {"content": "Okay, the user should check the soil and water."}})
+        with self.assertRaisesRegex(OllamaUnavailable, "español"):
+            final_review({"message": {"content": "El usuario quiere rotar cultivos. Debo responder en español."}})
+        with self.assertRaisesRegex(OllamaUnavailable, "español"):
+            final_review({"message": {"content": answer}, "done_reason": "length"})
+        with self.assertRaisesRegex(OllamaUnavailable, "razonamiento"):
+            final_review({"message": {"content": "<think>incomplete"}})
 
 
 class AuthTests(TestCase):

@@ -26,6 +26,30 @@ const MONTHS = [
   { name: 'DICIEMBRE', abbreviation: 'DIC' },
 ]
 const WEEKDAYS = ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá']
+const MONTHS_EN = [
+  { name: 'JANUARY', abbreviation: 'JAN' }, { name: 'FEBRUARY', abbreviation: 'FEB' },
+  { name: 'MARCH', abbreviation: 'MAR' }, { name: 'APRIL', abbreviation: 'APR' },
+  { name: 'MAY', abbreviation: 'MAY' }, { name: 'JUNE', abbreviation: 'JUN' },
+  { name: 'JULY', abbreviation: 'JUL' }, { name: 'AUGUST', abbreviation: 'AUG' },
+  { name: 'SEPTEMBER', abbreviation: 'SEP' }, { name: 'OCTOBER', abbreviation: 'OCT' },
+  { name: 'NOVEMBER', abbreviation: 'NOV' }, { name: 'DECEMBER', abbreviation: 'DEC' },
+]
+const WEEKDAYS_EN = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+const lunarTextEn = {
+  creciente: 'waxing', menguante: 'waning', 'Luna nueva': 'New moon', 'Luna llena': 'Full moon',
+  'Cuarto creciente': 'First quarter', 'Cuarto menguante': 'Last quarter',
+  'Luna Nueva': 'New Moon', Creciente: 'Waxing', 'Luna Llena': 'Full Moon', 'Cuarto Menguante': 'Last Quarter',
+  'No sembrar / Descanso y preparación': 'Do not sow / Rest and prepare',
+  'Siembra de hojas / Siembra de flores': 'Sow leafy crops / Sow flowers',
+  'Cosecha general / Recolección': 'General harvest / Gathering',
+  'Poda de formación / Control de plagas': 'Formative pruning / Pest control',
+  Poda: 'Pruning', 'Siembra de Raíces': 'Sow root crops', 'Siembra de Hojas': 'Sow leafy crops',
+  'Siembra de Flores': 'Sow flowers', Recolección: 'Harvest', 'Riego/Abonado': 'Watering/Fertilizing',
+  'Control de Plagas': 'Pest control', 'Dato no disponible': 'Data unavailable',
+}
+function lunarText(text, language) {
+  return language === 'en' ? (lunarTextEn[text] || text) : text
+}
 const ACTIVITY_ICONS = {
   scissors: Scissors,
   carrot: Carrot,
@@ -50,9 +74,9 @@ function moonPath(fraction, waxing) {
   return `M 50 2 A 48 48 0 0 ${outerSweep} 50 98 ${terminator} Z`
 }
 
-function MoonImage({ lunarDay, className = '' }) {
-  const phaseName = lunarDay.principalPhaseLabel || (lunarDay.waxing ? 'creciente' : 'menguante')
-  const label = `Luna en fase ${phaseName}, ${lunarDay.percentVisible}% visible`
+function MoonImage({ lunarDay, className = '', language = 'es' }) {
+  const phaseName = lunarText(lunarDay.principalPhaseLabel || (lunarDay.waxing ? 'creciente' : 'menguante'), language)
+  const label = translated(language, `Luna en fase ${phaseName}, ${lunarDay.percentVisible}% visible`, `Moon in ${phaseName} phase, ${lunarDay.percentVisible}% visible`)
   const imageClass = className ? `lunar-moon-image ${className}` : 'lunar-moon-image'
   const path = moonPath(lunarDay.fraction, lunarDay.waxing)
   return <svg className={imageClass} viewBox="0 0 100 100" role="img" aria-label={label}>
@@ -76,13 +100,13 @@ function LunarFarmIllustration() {
   </svg>
 }
 
-function eventText(event) {
+function eventText(event, language) {
   if (!event) return null
   const day = String(event.time.getDate()).padStart(2, '0')
-  const month = MONTHS[event.time.getMonth()].abbreviation
+  const month = (language === 'en' ? MONTHS_EN : MONTHS)[event.time.getMonth()].abbreviation
   const hour = String(event.time.getHours()).padStart(2, '0')
   const minute = String(event.time.getMinutes()).padStart(2, '0')
-  return `${day} ${month} - ${hour}:${minute} ${event.label.toLocaleUpperCase('es')}`
+  return `${day} ${month} - ${hour}:${minute} ${lunarText(event.label, language).toLocaleUpperCase(language === 'en' ? 'en' : 'es')}`
 }
 
 export function LunarCalendar({ open, language = 'es', onClose, today = new Date() }) {
@@ -100,7 +124,8 @@ export function LunarCalendar({ open, language = 'es', onClose, today = new Date
       phaseEvents.find(event => event.key === rule.principalPhaseKey),
     ]),
   ), [phaseEvents])
-  const month = MONTHS[visibleMonth]
+  const month = (language === 'en' ? MONTHS_EN : MONTHS)[visibleMonth]
+  const weekdays = language === 'en' ? WEEKDAYS_EN : WEEKDAYS
   const firstDate = `${LUNAR_CALENDAR_YEAR}-${String(visibleMonth + 1).padStart(2, '0')}-01`
   const focusDate = selectedDate?.startsWith(firstDate.slice(0, 7)) ? selectedDate : firstDate
 
@@ -156,45 +181,47 @@ export function LunarCalendar({ open, language = 'es', onClose, today = new Date
       <header className="lunar-farm-banner">
         <LunarFarmIllustration />
         <div className="lunar-farm-copy">
-          <h2 id="lunar-dialog-title" aria-live="polite">CALENDARIO LUNAR AGRÍCOLA - {month.name} {LUNAR_CALENDAR_YEAR}</h2>
-          <p>Observa la Luna, trabaja la tierra y cosecha abundancia.</p>
+          <h2 id="lunar-dialog-title" aria-live="polite">{translated(language, 'CALENDARIO LUNAR AGRÍCOLA', 'AGRICULTURAL LUNAR CALENDAR')} - {month.name} {LUNAR_CALENDAR_YEAR}</h2>
+          <p>{translated(language, 'Observa la Luna, trabaja la tierra y cosecha abundancia.', 'Observe the Moon, work the land, and harvest abundance.')}</p>
         </div>
       </header>
 
-      <div className="lunar-month-toolbar" aria-label="Navegación del calendario">
-        <button type="button" className="lunar-nav-button" aria-label="Mes anterior" onClick={() => navigateMonth(-1)} disabled={visibleMonth === 0}><ChevronLeft aria-hidden="true" /></button>
+      <div className="lunar-month-toolbar" aria-label={translated(language, 'Navegación del calendario', 'Calendar navigation')}>
+        <button type="button" className="lunar-nav-button" aria-label={translated(language, 'Mes anterior', 'Previous month')} onClick={() => navigateMonth(-1)} disabled={visibleMonth === 0}><ChevronLeft aria-hidden="true" /></button>
         <span className="lunar-current-month" aria-live="polite">{month.name} {LUNAR_CALENDAR_YEAR}</span>
-        <button type="button" className="lunar-nav-button" aria-label="Mes siguiente" onClick={() => navigateMonth(1)} disabled={visibleMonth === 11}><ChevronRight aria-hidden="true" /></button>
+        <button type="button" className="lunar-nav-button" aria-label={translated(language, 'Mes siguiente', 'Next month')} onClick={() => navigateMonth(1)} disabled={visibleMonth === 11}><ChevronRight aria-hidden="true" /></button>
         <button type="button" className="lunar-today-button" onClick={goToToday} disabled={!todayKey}>{translated(language, 'Hoy', 'Today')}</button>
         <button type="button" className="lunar-close-button" onClick={closeDialog} aria-label={translated(language, 'Cerrar calendario', 'Close calendar')}><X aria-hidden="true" /></button>
       </div>
 
       <div className="lunar-grid" role="grid" aria-label={`${month.name} ${LUNAR_CALENDAR_YEAR}`}>
         <div role="row" className="lunar-grid-row lunar-grid-head">
-          {WEEKDAYS.map(day => <span role="columnheader" key={day}>{day}</span>)}
+          {weekdays.map(day => <span role="columnheader" key={day}>{day}</span>)}
         </div>
         {rows.map(row => <div role="row" className="lunar-grid-row" key={row.key}>
           {row.cells.map((cell, weekdayIndex) => {
             if (!cell) return <span role="gridcell" aria-hidden="true" className="lunar-outside-day" key={`${row.key}-${weekdayIndex}`} />
             const rule = getLunarAgriculturalRule(cell)
-            const eventLabel = eventText(cell.event)
-            const monthLabel = cell.outsideMonth ? ` ${MONTHS[cell.monthIndex].abbreviation}` : ''
+            const eventLabel = eventText(cell.event, language)
+            const monthLabel = cell.outsideMonth ? ` ${(language === 'en' ? MONTHS_EN : MONTHS)[cell.monthIndex].abbreviation}` : ''
             const caption = cell.principalPhase ? null : `${cell.percentVisible}% visible`
             const isToday = cell.date === todayKey
             const isSelected = cell.date === selectedDate
-            const accessibleName = `${cell.day} ${MONTHS[cell.monthIndex].name}, Luna ${cell.percentVisible}% visible.${eventLabel ? ` ${eventLabel}.` : ''} ${rule.recommendation}.`
+            const localizedRule = { ...rule, title: lunarText(rule.title, language), recommendation: lunarText(rule.recommendation, language), guide: lunarText(rule.guide, language) }
+            const accessibleName = translated(language, `${cell.day} ${MONTHS[cell.monthIndex].name}, Luna ${cell.percentVisible}% visible.${eventLabel ? ` ${eventLabel}.` : ''} ${localizedRule.recommendation}.`, `${cell.day} ${(language === 'en' ? MONTHS_EN : MONTHS)[cell.monthIndex].name}, Moon ${cell.percentVisible}% visible.${eventLabel ? ` ${eventLabel}.` : ''} ${localizedRule.recommendation}.`)
             const visibleIcons = LUNAR_AGRICULTURAL_RULES.activityLegend.filter(item => rule.activityKeys.includes(item.key))
             return <button type="button" role="gridcell" id={`lunar-date-${cell.date}`} key={cell.date} className={`lunar-day-cell${cell.outsideMonth ? ' lunar-adjacent-month' : ''}${isSelected ? ' lunar-day-selected' : ''}${isToday ? ' lunar-day-today' : ''}`} aria-label={accessibleName} aria-selected={isSelected} aria-current={isToday ? 'date' : undefined} tabIndex={cell.date === focusDate ? 0 : -1} onClick={() => chooseDate(cell.date, cell.outsideMonth)} onKeyDown={event => onDayKeyDown(event, cell.date)}>
               <span className="lunar-date-number">{cell.day}{monthLabel && <span className="lunar-date-month">{monthLabel}</span>}</span>
-              <MoonImage lunarDay={cell} />
+              <MoonImage lunarDay={cell} language={language} />
               {caption && <span className="lunar-date-caption">{caption}</span>}
               {eventLabel && <span className="lunar-event-label">{eventLabel}</span>}
-              <span className="lunar-recommendation">{rule.recommendation}</span>
-              {visibleIcons.length > 0 && <span className="lunar-activity-icons" aria-label="Iconos de actividad">
+              <span className="lunar-recommendation">{localizedRule.recommendation}</span>
+              {visibleIcons.length > 0 && <span className="lunar-activity-icons" aria-label={translated(language, 'Iconos de actividad', 'Activity icons')}>
                 {visibleIcons.map(item => {
                   const Icon = ACTIVITY_ICONS[item.icon]
                   const isSupport = item.key === rule.supportIconKey
-                  const label = isSupport ? `Actividad de apoyo: ${item.label}` : item.label
+                  const activityLabel = lunarText(item.label, language)
+                  const label = isSupport ? translated(language, `Actividad de apoyo: ${activityLabel}`, `Supporting activity: ${activityLabel}`) : activityLabel
                   return <span key={item.key} className={`lunar-activity-icon${isSupport ? ' lunar-support-icon' : ''}`} role="img" aria-label={label} title={label}><Icon aria-hidden="true" /></span>
                 })}
               </span>}
@@ -204,29 +231,29 @@ export function LunarCalendar({ open, language = 'es', onClose, today = new Date
       </div>
 
       <section className="lunar-phase-guide" aria-labelledby="lunar-phase-guide-title">
-        <h3 id="lunar-phase-guide-title">Guía de fases lunares</h3>
+        <h3 id="lunar-phase-guide-title">{translated(language, 'Guía de fases lunares', 'Moon phase guide')}</h3>
         <div className="lunar-phase-guide-grid">
           {Object.entries(LUNAR_AGRICULTURAL_RULES.phases).map(([key, rule]) => {
             const representativeEvent = phaseGuideEvents[rule.principalPhaseKey]
             return <article className="lunar-phase-guide-card" key={key}>
-              {representativeEvent && <MoonImage lunarDay={representativeEvent} className="lunar-guide-moon" />}
-              <div><h4>{rule.title}</h4><p>{rule.guide}</p></div>
+              {representativeEvent && <MoonImage lunarDay={representativeEvent} className="lunar-guide-moon" language={language} />}
+              <div><h4>{lunarText(rule.title, language)}</h4><p>{lunarText(rule.guide, language)}</p></div>
             </article>
           })}
         </div>
       </section>
 
       <section className="lunar-activity-legend" aria-labelledby="lunar-activity-legend-title">
-        <h3 id="lunar-activity-legend-title">Leyenda de iconos</h3>
+        <h3 id="lunar-activity-legend-title">{translated(language, 'Leyenda de iconos', 'Icon legend')}</h3>
         <ul>
           {LUNAR_AGRICULTURAL_RULES.activityLegend.map(item => {
             const Icon = ACTIVITY_ICONS[item.icon]
-            return <li key={item.key}><Icon aria-hidden="true" /><span>{item.label}</span></li>
+            return <li key={item.key}><Icon aria-hidden="true" /><span>{lunarText(item.label, language)}</span></li>
           })}
         </ul>
       </section>
 
-      <p className="lunar-source-note">Fases calculadas con SunCalc 2.1.4. Las recomendaciones son prácticas tradicionales según la fase lunar, no son datos de NASA POWER ni de NASA GIBS y no sustituyen asesoría agronómica.</p>
+      <p className="lunar-source-note">{translated(language, 'Fases calculadas con SunCalc 2.1.4. Las recomendaciones son prácticas tradicionales según la fase lunar, no son datos de NASA POWER ni de NASA GIBS y no sustituyen asesoría agronómica.', 'Phases are calculated with SunCalc 2.1.4. Recommendations are traditional practices associated with lunar phases, not NASA POWER or NASA GIBS data, and do not replace agronomic advice.')}</p>
     </section>
   </dialog>
 }

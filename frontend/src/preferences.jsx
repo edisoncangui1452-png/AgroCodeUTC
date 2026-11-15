@@ -82,7 +82,6 @@ export function PreferenceControls() {
         <span className="preference-button-label">{english ? (theme === 'dark' ? 'Light' : 'Dark') : (theme === 'dark' ? 'Claro' : 'Oscuro')}</span>
       </button>
     </div>
-    {english && <span className="preference-fallback" role="note">Some sections are still shown in Spanish because a translation is not available.</span>}
   </div>
 }
 

@@ -1,3 +1,5 @@
+import logging
+
 import requests
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.tokens import default_token_generator
@@ -18,14 +20,52 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from .models import AgronomicProfile, Agronomist, Analysis, Crop, CropHistory, Parcel
+from .models import AgronomicProfile, Agronomist, Analysis, Crop, CropHistory, CropSimulation, Parcel
+from .agronomy import cached_rotation_months, rotation_guidance
+from .ollama import OllamaUnavailable, check_model, review_strategy
+from .simulator_weather import WeatherUnavailable, get_simulator_weather
+from .simulator_engine import evaluate
+from django.utils import timezone
 from .serializers import (
     AgronomistSerializer, AnalysisSerializer, CropSerializer, HistorySerializer,
-    ParcelSerializer, ProfileSerializer, RegisterSerializer, UserSerializer,
+    ParcelSerializer, ProfileSerializer, RegisterSerializer, SimulationSerializer, UserSerializer,
 )
-from .services import UNITS, available_years, daily_coverage, get_climate, historical_scenario, monthly_summary, recommendations
+from .services import UNITS, available_years, daily_coverage, get_climate, get_dashboard_metrics, get_historical_baseline, historical_scenario, monthly_summary, recommendations
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
+
+
+class SimulationViewSet(viewsets.ModelViewSet):
+    serializer_class = SimulationSerializer
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_queryset(self):
+        queryset = CropSimulation.objects.filter(owner=self.request.user).select_related("parcel")
+        parcel_id = self.request.query_params.get("parcel")
+        if parcel_id:
+            if not parcel_id.isdecimal():
+                raise ValidationError({"parcel": "Identificador inválido."})
+            queryset = queryset.filter(parcel_id=parcel_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+    @action(detail=True, methods=["get"])
+    def evaluate(self, request, pk=None):
+        simulation = self.get_object()
+        refresh = request.query_params.get("refresh", "0")
+        if refresh not in ("0", "1"):
+            raise ValidationError({"refresh": "Use 0 o 1."})
+        try:
+            weather = get_simulator_weather(simulation.parcel, simulation.days, refresh=refresh == "1")
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        except WeatherUnavailable as exc:
+            return Response({"detail": str(exc)}, status=503, headers={"Cache-Control": "private, no-store"})
+        return Response(evaluate(simulation, weather, timezone.now()),
+                        headers={"Cache-Control": "private, no-store"})
 
 
 @api_view(["GET"])
@@ -195,7 +235,11 @@ def reverse_geocode(request):
 
 @api_view(["GET"])
 def ai_status(request):
-    return Response({"configured": bool(settings.AGRO_AI_API_KEY), "model": settings.AGRO_AI_MODEL if settings.AGRO_AI_API_KEY else None})
+    try:
+        check_model()
+        return Response({"configured": True, "model": settings.OLLAMA_MODEL})
+    except OllamaUnavailable as exc:
+        return Response({"configured": False, "model": settings.OLLAMA_MODEL, "detail": str(exc)})
 
 
 class ParcelViewSet(viewsets.ModelViewSet):
@@ -207,12 +251,33 @@ class ParcelViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
 
+    @action(detail=True, methods=["get"], url_path="simulator-weather")
+    def simulator_weather(self, request, pk=None):
+        parcel = self.get_object()
+        try:
+            days = int(request.query_params.get("days", "4"))
+            refresh = request.query_params.get("refresh", "0")
+            if refresh not in ("0", "1"):
+                raise ValueError("El parámetro refresh debe ser 0 o 1.")
+            result = get_simulator_weather(parcel, days, refresh=refresh == "1")
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        except WeatherUnavailable as exc:
+            return Response({"detail": str(exc)}, status=503, headers={"Cache-Control": "private, no-store"})
+        return Response(result, headers={"Cache-Control": "private, no-store"})
+
     @action(detail=True, methods=["get"], url_path="dashboard-metrics")
     def dashboard_metrics(self, request, pk=None):
         parcel = self.get_object()
         try:
             return Response(get_dashboard_metrics(parcel))
-        except (ValueError, requests.RequestException) as exc:
+        except requests.RequestException as exc:
+            logger.warning("NASA POWER dashboard request failed (%s)", type(exc).__name__)
+            return Response(
+                {"detail": "No se pudieron cargar los indicadores climáticos. Inténtalo de nuevo en unos minutos."},
+                status=503,
+            )
+        except ValueError as exc:
             return Response({"detail": f"No fue posible obtener indicadores NASA: {exc}"}, status=503)
 
     @action(detail=True, methods=["get"], url_path="historical-baseline")
@@ -220,7 +285,13 @@ class ParcelViewSet(viewsets.ModelViewSet):
         parcel = self.get_object()
         try:
             return Response(get_historical_baseline(parcel))
-        except (ValueError, requests.RequestException) as exc:
+        except requests.RequestException as exc:
+            logger.warning("NASA POWER baseline request failed (%s)", type(exc).__name__)
+            return Response(
+                {"detail": "No se pudo cargar el historial climático. Inténtalo de nuevo en unos minutos."},
+                status=503,
+            )
+        except ValueError as exc:
             return Response({"detail": f"No fue posible consultar el historial NASA: {exc}"}, status=503)
 
     @action(detail=True, methods=["get", "put"], url_path="profile")
@@ -242,7 +313,13 @@ class ParcelViewSet(viewsets.ModelViewSet):
             end = int(request.data.get("end_year", request.query_params.get("end_year", end_default)))
             values, cached, fetched_at = get_climate(parcel, start, end)
             monthly = monthly_summary(values, start, end)
-        except (ValueError, requests.RequestException) as exc:
+        except requests.RequestException as exc:
+            logger.warning("NASA POWER climate request failed (%s)", type(exc).__name__)
+            return Response(
+                {"detail": "No se pudo cargar el historial climático. Inténtalo de nuevo en unos minutos."},
+                status=503,
+            )
+        except ValueError as exc:
             return Response({"detail": f"No fue posible consultar NASA POWER: {exc}"}, status=503)
         result = {
             "years": [start, end], "period": {"start": f"{start}-01-01", "end": f"{end}-12-31"},
@@ -262,7 +339,13 @@ class ParcelViewSet(viewsets.ModelViewSet):
         start, end = available_years()
         try:
             values, _, _ = get_climate(parcel, start, end)
-        except (ValueError, requests.RequestException) as exc:
+        except requests.RequestException as exc:
+            logger.warning("NASA POWER recommendation request failed (%s)", type(exc).__name__)
+            return Response(
+                {"detail": "No se pudo consultar el clima para generar recomendaciones. Inténtalo de nuevo en unos minutos."},
+                status=503,
+            )
+        except ValueError as exc:
             return Response({"detail": f"No fue posible consultar NASA POWER: {exc}"}, status=503)
         result = recommendations(parcel, monthly_summary(values, start, end))
         output = {
@@ -282,6 +365,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
         in_demo_region = parcel.country.upper() == "EC" and -4.4 <= parcel.latitude <= 0.5 and -79.2 <= parcel.longitude <= -77.5
         crops = Crop.objects.filter(validated=True, country_code="EC", region="Sierra ecuatoriana") if in_demo_region else []
         catalog = {c.name.lower(): c for c in crops}
+        monthly = cached_rotation_months(parcel)
         result = []
         for index, strategy in enumerate(strategies):
             names = [str(n)[:120].strip() for n in strategy["crops"]]
@@ -295,6 +379,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
             guidance = repeated_neighbors or ["No se detectaron familias consecutivas repetidas entre las fichas disponibles. La diversidad no garantiza evitar plagas."]
             if any(not c for c in matched):
                 guidance.append("Faltan fichas para parte de la secuencia; no se puede evaluar la rotación completa.")
+            guidance.extend(rotation_guidance(parcel, names, matched, catalog, monthly))
             result.append({
                 "name": strategy.get("name", f"Estrategia {index + 1}")[:100],
                 "crops": names, "documented": [c.name for c in matched if c],
@@ -310,45 +395,39 @@ class ParcelViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="ai-rotation-review")
     def ai_rotation_review(self, request, pk=None):
         parcel = self.get_object()
-        if not settings.AGRO_AI_API_KEY:
-            return Response({"detail": "IA no configurada. Añade AGRO_AI_API_KEY al archivo .env del backend."}, status=503)
-        if not settings.AGRO_AI_URL.startswith("https://"):
-            return Response({"detail": "La URL del proveedor de IA debe usar HTTPS."}, status=503)
         strategy = request.data.get("crops")
-        if not isinstance(strategy, list) or not 1 <= len(strategy) <= 12 or any(not isinstance(name, str) or len(name) > 120 for name in strategy):
+        if not isinstance(strategy, list) or not 1 <= len(strategy) <= 12 or any(
+            not isinstance(name, str) or not name.strip() or len(name) > 120 for name in strategy
+        ):
             raise ValidationError({"crops": "Envía entre 1 y 12 nombres de cultivos."})
-        # Only non-private crop names and documented families leave the backend. No coordinates or history.
+        strategy_name = request.data.get("strategy_name", "Estrategia A")
+        if strategy_name not in ("Estrategia A", "Estrategia B", "Estrategia C"):
+            raise ValidationError({"strategy_name": "Selecciona la estrategia A, B o C."})
+        # Keep this context on loopback. Never include coordinates, history, free-text notes or parcel name.
         in_demo_region = parcel.country.upper() == "EC" and -4.4 <= parcel.latitude <= 0.5 and -79.2 <= parcel.longitude <= -77.5
         crops = Crop.objects.filter(validated=True, country_code="EC", region="Sierra ecuatoriana") if in_demo_region else []
         catalog = {c.name.lower(): c.family for c in crops}
-        context = [{"crop": name.strip(), "family": catalog.get(name.strip().lower(), "sin ficha")} for name in strategy]
+        plants = [{"crop": name.strip(), "family": catalog.get(name.strip().lower(), "sin ficha")}
+                  for name in strategy]
+        profile = AgronomicProfile.objects.filter(parcel=parcel).first()
+        context = {
+            "strategy": strategy_name,
+            "plants": plants,
+            "association_type": "no especificado (asociación simultánea o rotación secuencial)",
+            "parcel_context": {
+                "country": parcel.country,
+                "soil_texture": profile.soil_texture if profile and profile.soil_texture else "sin datos",
+                "irrigation": profile.irrigation if profile and profile.irrigation else "sin datos",
+            },
+            "family_source": "Fichas generales FAO solo en corredor demo de Sierra ecuatoriana; sin ficha en otros casos.",
+        }
         try:
-            response = requests.post(
-                settings.AGRO_AI_URL,
-                headers={"Authorization": f"Bearer {settings.AGRO_AI_API_KEY}", "Content-Type": "application/json"},
-                json={
-                    "model": settings.AGRO_AI_MODEL, "temperature": 0.2, "max_tokens": 500,
-                    "messages": [
-                        {"role": "system", "content": (
-                            "Eres una guía agronómica prudente en español. Explica únicamente diversidad de familias "
-                            "y dudas para un profesional. No inventes asociaciones comprobadas, eficacia contra plagas, "
-                            "rendimiento, clima ni bibliografía. No recomiendes pesticidas. Señala datos insuficientes "
-                            "y que ninguna combinación garantiza evitar enfermedades."
-                        )},
-                        {"role": "user", "content": f"Evalúa esta secuencia de cultivos y familias documentadas, sin inferir ubicación ni clima: {context!r}"},
-                    ],
-                },
-                timeout=(5, 25),
-            )
-            response.raise_for_status()
-            text = response.json()["choices"][0]["message"]["content"]
-            if not isinstance(text, str) or not text.strip():
-                raise ValueError("Respuesta vacía del proveedor.")
-        except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as exc:
-            return Response({"detail": f"El proveedor de IA no está disponible: {exc}"}, status=503)
+            text = review_strategy(context)
+        except OllamaUnavailable as exc:
+            return Response({"detail": str(exc)}, status=503)
         return Response({
-            "review": text[:3000], "model": settings.AGRO_AI_MODEL,
-            "notice": "Texto generado por IA sin validación agronómica. No se enviaron coordenadas ni historial. Consulta un profesional antes de actuar.",
+            "review": text, "model": settings.OLLAMA_MODEL,
+            "notice": "Texto generado por IA local sin validación agronómica. No se enviaron coordenadas ni historial. Consulta un profesional antes de actuar.",
         })
 
 

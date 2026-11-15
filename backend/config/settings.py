@@ -83,3 +83,5 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() == "true"
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER or "AgrocodeUTC <no-reply@localhost>"
 GEOCODER_USER_AGENT = os.getenv("GEOCODER_USER_AGENT", "AgrocodeUTC/0.1 (local development)")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:4b")

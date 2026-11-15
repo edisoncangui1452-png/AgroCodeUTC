@@ -19,13 +19,99 @@ export const helpTopics = [
 function normalize(text) {
   return String(text).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
-export function answerHelp(question) {
+const englishHelp = {
+  '¿Cómo creo una parcela?': {
+    question: 'How do I create a parcel?',
+    words: ['create', 'parcel', 'land', 'draw'],
+    answer: 'In My parcels, search for a location or country, use the map polygon tool, mark the vertices, and select Save parcel. The area is calculated on the server.',
+  },
+  '¿Cómo busco un país?': {
+    question: 'How do I search for a country?',
+    words: ['country', 'search', 'map', 'location'],
+    answer: 'Search for a country or select it in Parcel details. The map will center on it and place a marker on the result. This does not restrict where you can draw.',
+  },
+  '¿Cómo edito o elimino una parcela?': {
+    question: 'How do I edit or delete a parcel?',
+    words: ['edit', 'delete', 'remove', 'vertices'],
+    answer: 'In My parcels, choose a parcel and use the map editing controls. Save to keep the changes. Delete parcel asks for confirmation and also deletes its history.',
+  },
+  '¿Cómo importo GeoJSON?': {
+    question: 'How do I import GeoJSON?',
+    words: ['import', 'file', 'geojson', 'upload'],
+    answer: 'Import GeoJSON opens a .geojson or .json file containing a polygon. After importing, check the country and select Save parcel. Importing alone does not save changes.',
+  },
+  '¿Para qué sirve Exportar?': {
+    question: 'What does Export do?',
+    words: ['export', 'download', 'geojson'],
+    answer: 'Export downloads a copy of the current polygon as parcela.geojson. It does not send or delete information.',
+  },
+  '¿Cómo uso el clima?': {
+    question: 'How do I use climate data?',
+    words: ['climate', 'nasa', 'power', 'temperature', 'rain', 'precipitation'],
+    answer: 'In Climate history, choose a parcel and select Query data to compare three years, or query the historical series for months from 1983–2025. These are regional values, not sensors on your farm.',
+  },
+  '¿Qué indica la humedad del suelo?': {
+    question: 'What does soil moisture indicate?',
+    words: ['moisture', 'soil', 'gwet'],
+    answer: 'Overview shows NASA POWER’s GWETTOP surface index converted from 0–1 to a percentage. It is not a soil analysis or volumetric moisture measurement on your parcel.',
+  },
+  '¿Qué significan las heladas?': {
+    question: 'What does the frost information mean?',
+    words: ['frost', 'cold', 'risk', 'probability'],
+    answer: 'Overview shows the percentage of past days with a minimum below 0 °C in the latest complete month. The long-term history compares monthly means of daily minimum temperatures; it does not count frost months. Neither value predicts frost tomorrow.',
+  },
+  '¿Puedo obtener un pronóstico?': {
+    question: 'Can I get a forecast?',
+    words: ['forecast', 'future', 'tomorrow', 'projection', 'prediction'],
+    answer: 'There is no daily forecast or validated projection for future years. The 1983–2025 reference describes equivalent historical months; it does not predict future dates.',
+  },
+  '¿Cómo se eligen los cultivos?': {
+    question: 'How are crops selected?',
+    words: ['crop', 'crops', 'recommend', 'plant', 'cycle'],
+    answer: 'Crops and rotations compares every month in a cycle with historical temperatures and FAO profiles. These are exploratory candidates, not locally validated recommendations. Check water, soil, and elevation with a professional.',
+  },
+  '¿Qué hace comparar rotaciones?': {
+    question: 'What does rotation comparison do?',
+    words: ['rotation', 'strategy', 'family', 'pest', 'disease', 'intercropping'],
+    answer: 'Enter three strategies with crops separated by commas. The app compares family diversity and notes missing profiles. Alternating families is a general guideline; it does not guarantee pest or disease control.',
+  },
+  '¿Dónde veo mi historial?': {
+    question: 'Where can I see my history?',
+    words: ['history', 'record', 'planting', 'harvest'],
+    answer: 'My history lets you select a parcel, record planting and harvest dates, edit records, and view saved analyses. Each parcel has its own timeline.',
+  },
+  '¿Cómo cambio mi contraseña?': {
+    question: 'How do I change my password?',
+    words: ['password', 'profile', 'account', 'email'],
+    answer: 'In My profile, you can edit your name and email and change your password. To recover access, use the link on the sign-in screen.',
+  },
+  '¿Qué es GIBS?': {
+    question: 'What is GIBS?',
+    words: ['gibs', 'satellite', 'layer', 'modis'],
+    answer: 'NASA GIBS adds a visual satellite image to the map. You can choose its date. It does not extract numeric measurements for your parcel.',
+  },
+}
+
+for (const topic of helpTopics) {
+  const translation = englishHelp[topic.question]
+  topic.question_en = translation.question
+  topic.answer_en = translation.answer
+  topic.words_en = translation.words
+}
+
+export function answerHelp(question, language = 'es') {
   const words = normalize(question).match(/[a-z0-9]+/g) || []
   const scored = helpTopics.map(topic => ({
-    topic, score: topic.words.reduce((score, word) => score + (words.includes(word) ? 1 : 0), 0),
+    topic, score: (topic.words || []).concat(language === 'en' ? topic.words_en || topic.words : []).reduce((score, word) => score + (words.includes(word) ? 1 : 0), 0),
   })).sort((a, b) => b.score - a.score)
-  return scored[0]?.score ? scored[0].topic : {
-    answer: 'No tengo una respuesta verificada para esa pregunta. Prueba con «parcelas», «clima», «cultivos» o «historial», o contacta a un profesional para dudas agronómicas.',
+  if (scored[0]?.score) {
+    const topic = scored[0].topic
+    return language === 'en' ? { ...topic, question: topic.question_en || topic.question, answer: topic.answer_en || topic.answer } : topic
+  }
+  return {
+    answer: language === 'en'
+      ? 'I do not have a verified answer to that question. Try “parcels”, “climate”, “crops”, or “history”, or contact a professional for agronomic questions.'
+      : 'No tengo una respuesta verificada para esa pregunta. Prueba con «parcelas», «clima», «cultivos» o «historial», o contacta a un profesional para dudas agronómicas.',
     path: null,
   }
 }

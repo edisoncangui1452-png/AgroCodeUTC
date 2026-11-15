@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CloudRain, CloudSun, Database, Droplets, MapPinned, Plus, Snowflake, Sprout, Thermometer } from 'lucide-react'
+import { ArrowRight, CalendarDays, CloudRain, CloudSun, Database, Droplets, MapPinned, Plus, Snowflake, Sprout, Thermometer } from 'lucide-react'
 import { api, errorMessage } from '../api'
 import { useAuth } from '../App'
 import ParcelMap from '../components/ParcelMap'
+import { LunarCalendar } from '../components/LunarCalendar'
+import { translated, usePreferences } from '../preferences'
 import { Empty, Heading, ParcelSelect, useParcels } from './shared'
 
-function displayValue(value, unit) {
-  return value === null || value === undefined ? 'Sin datos' : `${Number(value).toLocaleString('es-EC', { maximumFractionDigits: 1 })}${unit}`
+function displayValue(value, unit, language) {
+  return value === null || value === undefined ? translated(language, 'Sin datos', 'No data') : `${Number(value).toLocaleString(language === 'en' ? 'en-US' : 'es-EC', { maximumFractionDigits: 1 })}${unit}`
 }
 
 function Metric({ icon: Icon, label, value, note }) {
@@ -18,8 +20,21 @@ function Metric({ icon: Icon, label, value, note }) {
   </div>
 }
 
+function LunarCalendarAccess() {
+  const [open, setOpen] = useState(false)
+  const { language } = usePreferences()
+  return <>
+    <button type="button" className="button button-outline" onClick={() => setOpen(true)} aria-haspopup="dialog">
+      <CalendarDays size={18} aria-hidden="true" /> {translated(language, 'Calendario lunar', 'Lunar calendar')}
+    </button>
+    <LunarCalendar open={open} language={language} onClose={() => setOpen(false)} />
+  </>
+}
+
 export function Dashboard() {
   const { user } = useAuth()
+  const { language } = usePreferences()
+  const t = (es, en) => translated(language, es, en)
   const { parcels, loading } = useParcels()
   const storageKey = `agrocodeutc:parcel:${user.id}`
   const [selected, setSelected] = useState(() => localStorage.getItem(storageKey) || '')
@@ -56,29 +71,30 @@ export function Dashboard() {
   }, [parcel?.id, retry])
 
   const periodLabel = metrics?.period
-    ? new Intl.DateTimeFormat('es', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${metrics.period}-01T12:00:00Z`))
+    ? new Intl.DateTimeFormat(language === 'en' ? 'en' : 'es', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${metrics.period}-01T12:00:00Z`))
     : null
 
   return <div>
+    <div className="mb-5 flex justify-end"><LunarCalendarAccess /></div>
     <div className="flex flex-wrap items-end justify-between gap-4">
-      <Heading eyebrow="TU ESPACIO DE TRABAJO" title="Una visión más clara de tu campo." description="Datos históricos de la parcela que elijas, en un mismo lugar." />
-      <Link to="/parcelas" className="button button-dark"><Plus size={17} /> Nueva parcela</Link>
+      <Heading eyebrow={t('TU ESPACIO DE TRABAJO', 'YOUR WORKSPACE')} title={t('Una visión más clara de tu campo.', 'A clearer view of your farm.')} description={t('Datos históricos de la parcela que elijas, en un mismo lugar.', 'Historical data for your selected parcel, all in one place.')} />
+      <Link to="/parcelas" className="button button-dark"><Plus size={17} /> {t('Nueva parcela', 'New parcel')}</Link>
     </div>
-    {loading ? <p className="mt-10">Cargando parcelas…</p> : !parcel
-      ? <div className="mt-9"><Empty icon={MapPinned} title="Tu historia empieza con un lugar" text="Dibuja tu primera parcela para explorar su clima histórico con datos de NASA." to="/parcelas" action="Crear mi parcela" /></div>
+    {loading ? <p className="mt-10">{t('Cargando parcelas…', 'Loading parcels…')}</p> : !parcel
+      ? <div className="mt-9"><Empty icon={MapPinned} title={t('Tu historia empieza con un lugar', 'Your story starts with a place')} text={t('Dibuja tu primera parcela para explorar su clima histórico con datos de NASA.', 'Draw your first parcel to explore its historical climate using NASA data.')} to="/parcelas" action={t('Crear mi parcela', 'Create my parcel')} /></div>
       : <>
         <div className="mt-8 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-display text-lg font-bold">Indicadores de la parcela</h2>
-          <span className="text-xs text-muted">{periodLabel ? `${periodLabel} · NASA POWER` : 'NASA POWER · último mes completo disponible'}</span>
+          <h2 className="font-display text-lg font-bold">{t('Indicadores de la parcela', 'Parcel indicators')}</h2>
+          <span className="text-xs text-muted">{periodLabel ? `${periodLabel} · NASA POWER` : t('NASA POWER · último mes completo disponible', 'NASA POWER · latest complete month available')}</span>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <Metric icon={Thermometer} label="Temperatura" value={metricsLoading ? 'Cargando…' : displayValue(metrics?.temperature_c, ' °C')} note="Media del mes" />
-          <Metric icon={CloudRain} label="Precipitación" value={metricsLoading ? 'Cargando…' : displayValue(metrics?.precipitation_mm, ' mm')} note="Lluvia acumulada del mes" />
-          <Metric icon={Droplets} label="Humedad del suelo" value={metricsLoading ? 'Cargando…' : displayValue(metrics?.soil_wetness_index_percent, ' %')} note="Índice superficial NASA; no medición local" />
-          <Metric icon={Snowflake} label="Heladas históricas" value={metricsLoading ? 'Cargando…' : displayValue(metrics?.observed_frost_percent, ' %')} note="Días observados con mínima bajo 0 °C" />
+          <Metric icon={Thermometer} label={t('Temperatura', 'Temperature')} value={metricsLoading ? t('Cargando…', 'Loading…') : displayValue(metrics?.temperature_c, ' °C', language)} note={t('Media del mes', 'Monthly average')} />
+          <Metric icon={CloudRain} label={t('Precipitación', 'Precipitation')} value={metricsLoading ? t('Cargando…', 'Loading…') : displayValue(metrics?.precipitation_mm, ' mm', language)} note={t('Lluvia acumulada del mes', 'Total rainfall for the month')} />
+          <Metric icon={Droplets} label={t('Humedad del suelo', 'Soil moisture')} value={metricsLoading ? t('Cargando…', 'Loading…') : displayValue(metrics?.soil_wetness_index_percent, ' %', language)} note={t('Índice superficial NASA; no medición local', 'NASA surface index; not a local measurement')} />
+          <Metric icon={Snowflake} label={t('Heladas históricas', 'Historical frost')} value={metricsLoading ? t('Cargando…', 'Loading…') : displayValue(metrics?.observed_frost_percent, ' %', language)} note={t('Días observados con mínima bajo 0 °C', 'Observed days with a minimum below 0 °C')} />
         </div>
-        {metricsError && <p role="alert" className="notice mt-3">{metricsError} <button className="ml-2 font-bold text-leaf underline" onClick={() => setRetry(retry + 1)}>Reintentar</button></p>}
-        {metrics && <p className="mt-3 text-xs leading-relaxed text-muted">Estimaciones regionales para {periodLabel}; no sensores dentro de la parcela. La humedad es un índice relativo de superficie; el porcentaje de heladas describe días pasados, no predice el futuro. {metrics.cached ? 'Datos en caché.' : ''}</p>}
+        {metricsError && <p role="alert" className="notice mt-3">{metricsError} <button className="ml-2 font-bold text-leaf underline" onClick={() => setRetry(retry + 1)}>{t('Reintentar', 'Retry')}</button></p>}
+        {metrics && <p className="mt-3 text-xs leading-relaxed text-muted">{t('Estimaciones regionales para', 'Regional estimates for')} {periodLabel}; {t('no sensores dentro de la parcela. La humedad es un índice relativo de superficie; el porcentaje de heladas describe días pasados, no predice el futuro.', 'not sensors inside the parcel. Moisture is a relative surface index; the frost percentage describes past days and does not predict the future.')} {metrics.cached ? t('Datos en caché.', 'Cached data.') : ''}</p>}
         <div className="mt-6 grid gap-5 lg:grid-cols-[1.5fr_1fr]">
           <section className="panel overflow-hidden p-0">
             <div className="flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6">
@@ -88,18 +104,18 @@ export function Dashboard() {
             <div className="h-[340px]"><ParcelMap geometry={parcel.geometry} point={[parcel.latitude, parcel.longitude]} /></div>
           </section>
           <section className="panel">
-            <h2 className="text-xl font-bold">Explora tus opciones</h2>
-            <p className="mt-2 text-sm text-muted">Conoce qué indican los datos y qué información falta para decidir mejor.</p>
+            <h2 className="text-xl font-bold">{t('Explora tus opciones', 'Explore your options')}</h2>
+            <p className="mt-2 text-sm text-muted">{t('Conoce qué indican los datos y qué información falta para decidir mejor.', 'See what the data indicate and what information is missing to make better decisions.')}</p>
             <div className="mt-8 space-y-3">
-              <Link to={`/clima?parcela=${parcel.id}`} className="action-row"><CloudSun size={20} /> Comparar clima <ArrowRight size={16} className="ml-auto" /></Link>
-              <Link to={`/agricultura?parcela=${parcel.id}`} className="action-row"><Sprout size={20} /> Cultivos y rotaciones <ArrowRight size={16} className="ml-auto" /></Link>
-              <Link to={`/historial?parcela=${parcel.id}`} className="action-row"><Database size={20} /> Mi historial <ArrowRight size={16} className="ml-auto" /></Link>
+              <Link to={`/clima?parcela=${parcel.id}`} className="action-row"><CloudSun size={20} /> {t('Comparar clima', 'Compare climate')} <ArrowRight size={16} className="ml-auto" /></Link>
+              <Link to={`/agricultura?parcela=${parcel.id}`} className="action-row"><Sprout size={20} /> {t('Cultivos y rotaciones', 'Crops and rotations')} <ArrowRight size={16} className="ml-auto" /></Link>
+              <Link to={`/historial?parcela=${parcel.id}`} className="action-row"><Database size={20} /> {t('Mi historial', 'My history')} <ArrowRight size={16} className="ml-auto" /></Link>
             </div>
           </section>
         </div>
         <div className="mt-6">
-          <h2 className="mb-4 text-xl font-bold">Análisis recientes · {parcel.name}</h2>
-          {analyses.length ? <div className="grid gap-3 md:grid-cols-2">{analyses.map(a => <div className="panel" key={a.id}><span className="text-xs uppercase text-muted">{a.kind}</span><h3 className="mt-2 font-bold">{a.title}</h3><span className="text-xs text-muted">{new Date(a.created_at).toLocaleDateString('es')}</span></div>)}</div> : <p className="text-sm text-muted">Todavía no hay análisis guardados para esta parcela.</p>}
+          <h2 className="mb-4 text-xl font-bold">{t('Análisis recientes', 'Recent analyses')} · {parcel.name}</h2>
+          {analyses.length ? <div className="grid gap-3 md:grid-cols-2">{analyses.map(a => <div className="panel" key={a.id}><span className="text-xs uppercase text-muted">{a.kind}</span><h3 className="mt-2 font-bold">{a.title}</h3><span className="text-xs text-muted">{new Date(a.created_at).toLocaleDateString(language === 'en' ? 'en' : 'es')}</span></div>)}</div> : <p className="text-sm text-muted">{t('Todavía no hay análisis guardados para esta parcela.', 'There are no analyses saved for this parcel yet.')}</p>}
         </div>
       </>}
   </div>

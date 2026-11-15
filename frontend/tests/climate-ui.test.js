@@ -115,6 +115,7 @@ before(async () => {
 after(async () => { await vite?.close() })
 
 function render(component, language = 'es') {
+  localStorage.setItem('agrocode-language', language)
   return renderToStaticMarkup(React.createElement(PreferencesProvider, null, React.createElement(React.Fragment, null, component)))
 }
 
@@ -215,8 +216,8 @@ test('country selector offers localized ISO codes and keeps the selected ISO val
   const selectElement = CountrySelect({ value: 'EC', onChange: code => { savedCode = code }, language: 'es' }).props.children[1]
   selectElement.props.onChange({ target: { value: 'PE' } })
   assert.equal(savedCode, 'PE')
-  const workspace = readFileSync(resolve(process.cwd(), 'src/pages/Workspace.jsx'), 'utf8')
-  assert.match(workspace, /const payload = \{ name, country, location, geometry \}/)
+  const parcelsPage = readFileSync(resolve(process.cwd(), 'src/pages/ParcelsPage.jsx'), 'utf8')
+  assert.match(parcelsPage, /const payload = \{ name, country, location, geometry \}/)
 })
 
 test('parcel area reuses saved hectares and converts to square metres without inventing missing data', () => {
@@ -316,10 +317,10 @@ test('agricultural lunar calendar renders farm banner, exact events, recommendat
   assert.match(december, /aria-label=\"Mes siguiente\" disabled=\"\"/)
 
   const calendar = readFileSync(resolve(process.cwd(), 'src/components/LunarCalendar.jsx'), 'utf8')
-  const workspace = readFileSync(resolve(process.cwd(), 'src/pages/Workspace.jsx'), 'utf8')
+  const dashboard = readFileSync(resolve(process.cwd(), 'src/pages/DashboardPage.jsx'), 'utf8')
   const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8')
-  assert.match(workspace, /setOpen\(true\)/)
-  assert.match(workspace, /aria-haspopup=\"dialog\"/)
+  assert.match(dashboard, /setOpen\(true\)/)
+  assert.match(dashboard, /aria-haspopup=\"dialog\"/)
   assert.match(calendar, /aria-label=.*Cerrar calendario/)
   assert.match(calendar, /onCancel=\{event => \{ event\.preventDefault\(\); closeDialog\(\) \}\}/)
   assert.match(calendar, /event\.target === dialogRef\.current/)
@@ -351,13 +352,15 @@ test('profile overview uses a real initial, profile fields, parcel count, icons,
 
 test('parcel creation actions use the shared brand primary token in both themes', () => {
   const root = resolve(process.cwd(), '..')
-  const workspace = readFileSync(join(root, 'frontend/src/pages/Workspace.jsx'), 'utf8')
+  const parcelsPage = readFileSync(join(root, 'frontend/src/pages/ParcelsPage.jsx'), 'utf8')
+  const dashboardPage = readFileSync(join(root, 'frontend/src/pages/DashboardPage.jsx'), 'utf8')
   const profile = readFileSync(join(root, 'frontend/src/components/ProfileOverview.jsx'), 'utf8')
   const styles = readFileSync(join(root, 'frontend/src/styles.css'), 'utf8')
-  assert.match(workspace, /action="Crear mi parcela"/)
-  assert.match(workspace, /to="\/parcelas" className="button button-dark"/)
-  assert.match(workspace, /Área: \{selectedArea\.hectares\} ha \(\{selectedArea\.squareMeters\} m²\)/)
-  assert.match(workspace, /Área no disponible/)
+  assert.match(dashboardPage, /action=\{t\('Crear mi parcela', 'Create my parcel'\)\}/)
+  assert.match(dashboardPage, /to="\/parcelas" className="button button-dark"/)
+  assert.match(parcelsPage, /t\('Área', 'Area'\)\}: \{selectedArea\.hectares\} ha/)
+  assert.match(parcelsPage, /t\('Área no disponible', 'Area unavailable'\)/)
+  assert.match(dashboardPage, /Calendario lunar/)
   assert.match(profile, /className="button button-dark mt-4"/)
   assert.match(styles, /\.button-dark \{ background: rgb\(var\(--brand-rgb\)\); color: var\(--on-brand\);/)
   assert.match(styles, /--brand-hover: #1f623c;/)
@@ -365,6 +368,17 @@ test('parcel creation actions use the shared brand primary token in both themes'
   assert.ok(contrastRatio('#ffffff', '#254f35') >= 4.5)
   assert.ok(contrastRatio('#ffffff', '#1f623c') >= 4.5)
   assert.ok(contrastRatio('#ffffff', '#28583a') >= 4.5)
+})
+
+test('English preference localizes controls and the profile overview', () => {
+  const controls = render(React.createElement(PreferenceControls), 'en')
+  const profile = render(React.createElement(ProfileOverview, {
+    firstName: 'Rosa', email: 'rosa@example.com', parcels: [parcel], parcelsState: 'ready', language: 'en',
+  }), 'en')
+  assert.match(controls, /EN · Español/)
+  assert.match(profile, /Your workspace/)
+  assert.match(profile, /Manage your details and view your registered parcels/)
+  assert.match(profile, /Email address/)
 })
 
 test('parcel map renders its declared view controller without an unresolved component', () => {

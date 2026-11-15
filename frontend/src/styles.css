@@ -130,7 +130,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .field small { font-size: .875rem; color: var(--warning); }
 .notice { border: 1px solid color-mix(in srgb, var(--earth) 50%, rgb(var(--line-rgb))); border-radius: 12px; background: var(--earth-soft); color: var(--text-primary); padding: 14px 16px; font-size: 1rem; line-height: 1.5; }
 .icon-button { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; border-radius: 10px; }
-.leaflet-container { z-index: 0; font-family: 'DM Sans', sans-serif; }
+.plant-2d-canvas { max-height: 330px; background: #edf7ef; }
+.plant-2d-growth { transition: transform .55s ease-out; }
+.plant-2d-leaf { animation: plant-leaf-appear .45s ease-out both; }
+.plant-2d-leaf path { transition: fill .5s ease-out; }
+.plant-2d-soil { transition: fill .5s ease-out; }
+@keyframes plant-leaf-appear { from { opacity: .25; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .plant-2d-growth, .plant-2d-leaf path, .plant-2d-soil { transition: none; }
+  .plant-2d-leaf { animation: none; }
+}.leaflet-container { z-index: 0; font-family: 'DM Sans', sans-serif; }
 .leaflet-bar a, .leaflet-control-layers, .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface) !important; color: var(--text-primary) !important; }
 @media (max-width: 767px) { .hero-visual { min-height: 380px; } .hero-center { width: 145px; height: 145px; } .panel { padding: 20px; } }
 
