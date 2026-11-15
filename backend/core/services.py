@@ -328,9 +328,19 @@ def recommendations(parcel, monthly):
                 if annual_rain and crop.min_annual_rain_mm is not None and crop.max_annual_rain_mm is not None
                 else "Sin comparación anual de lluvia suficiente."
             )
+            if optimal_rain_years is None or not annual_rain:
+                rain_status = "sin_datos"
+            elif optimal_rain_years == len(annual_rain):
+                rain_status = "en_rango_historico"
+            else:
+                rain_status = "compatibilidad_parcial"
+            available = [int(duration) for duration in durations]
+            midpoint = (crop.cycle_days + (crop.max_cycle_days or crop.cycle_days)) / 2
+            primary_duration = min(available, key=lambda duration: (abs(duration * 30 - midpoint), duration))
             result.append({
-                "crop": crop.name, "family": crop.family, "region": crop.region,
+                "id": crop.pk, "crop": crop.name, "family": crop.family, "region": crop.region,
                 "cycle_days": crop.cycle_days, "max_cycle_days": crop.max_cycle_days,
+                "primary_duration": primary_duration, "rain_status": rain_status,
                 "durations": durations, "months": sorted({w["start_month"] for windows in durations.values() for w in windows}),
                 "source": crop.source, "regional_validated": crop.regional_validated,
                 "rain_context": rain_context, "rain_optimal_years": optimal_rain_years,
