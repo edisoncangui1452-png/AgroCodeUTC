@@ -1,6 +1,8 @@
-# AgroFísica
+# AgrocodeUTC
+
 
 Prototipo web para consultar el clima histórico de una parcela con NASA POWER y conservar decisiones agrícolas. Interfaz en español, visual verde claro/blanco. **No está desplegado y no se debe usar como asesoría agronómica profesional.**
+
 
 ## Estructura
 
@@ -64,4 +66,15 @@ La suite usa dobles para respuestas NASA; las pruebas de integración externas s
 
 ## Funciones aún limitadas
 
-La versión actual **no satisface todo el prompt inicial**: las 15 fichas Ecocrop no están verificadas para localidades concretas; el corredor andino es una **aproximación rectangular**, no una delimitación agroecológica. Tampoco hay pronósticos futuros calibrados, asistente capaz de resolver preguntas arbitrarias, geocodificación mundial robusta, catálogo dinámico de capas GIBS desde GetCapabilities, calendario de siembra completo, estimación hídrica por rotación ni resumen compartible con un profesional. No se deben presentar estas partes como implementadas. La consulta POWER requiere conexión; GIBS y OSM también. La caché NASA diaria dura 30 días y la mensual histórica 90 días en SQLite; la de geocodificación en memoria dura 24 horas.
+
+La versión actual **no satisface todo el prompt inicial**: no hay catálogo agronómico verificado precargado, geocodificación mundial robusta, catálogo de capas GIBS desde GetCapabilities, calendario de siembra completo, estimación hídrica por rotación ni resumen compartible con un profesional. No se deben presentar estas partes como implementadas. La consulta POWER requiere conexión; GIBS y OSM también. La caché NASA dura 30 días en SQLite; la de geocodificación en memoria dura 24 horas.
+
+## Ficha climática imprimible
+
+La pantalla de historial climático genera una ficha con datos NASA POWER ya consultados, cobertura diaria por variable, fechas faltantes y avisos en español e inglés. Incluye un resumen visual de valores mensuales. Desde el panel principal se abre el calendario lunar independiente de 2026, calculado con SunCalc 2.1.4. La ficha se puede guardar como PDF desde la impresión del navegador. El rediseño, el modo avanzado, el idioma/tema y las limitaciones del asistente local están descritos en [docs/FICHA_CLIMATICA.md](docs/FICHA_CLIMATICA.md).
+
+El renombre global a AgrocodeUTC se verificó con una búsqueda final sin distinguir mayúsculas y minúsculas; el resultado fue de cero coincidencias del nombre anterior.
+
+## Ajustes de UI y UX
+
+Las preferencias de apariencia, el selector de país ISO, la medición de superficie, el perfil visual y el calendario lunar 2026 están descritos en [`docs/AJUSTES_UI_UX.md`](docs/AJUSTES_UI_UX.md). El calendario usa SunCalc 2.1.4 a las 12:00 hora local; no son datos de NASA ni recomendaciones agronómicas.

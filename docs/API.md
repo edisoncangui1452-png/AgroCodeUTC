@@ -31,6 +31,6 @@ Base: `/api/v1/`. JSON; sesiones Django con cookie HttpOnly. Para `POST`, `PUT`,
 
 Las rutas `parcels`, `history` y `analyses` filtran por propietario incluso al solicitar un ID concreto. Una respuesta NASA puede demorar decenas de segundos; los errores del proveedor devuelven 503.
 
-En `historical-baseline`, `rain_mm` es el producto de la tasa mensual en mm/día por días de ese mes; la clave `monthly_mean_min_below_zero_frequency_percent` cuenta meses cuya **media de las mínimas diarias** cayó por debajo de 0 °C, no meses que tuvieron una helada. Todas las frecuencias requieren ≥30 años válidos y no son probabilidades para fechas futuras. La respuesta de IA envía solo nombres escritos por el usuario y familias documentadas al proveedor configurado; no envía coordenadas ni historial.
+## Respuesta climática
 
-El perfil de parcela admite `soil_texture` entre las 11 clases ofrecidas por la interfaz e `irrigation` con `Sí`, `No` o vacío (desconocido). `water_availability` anterior permanece en la base de datos para preservar registros históricos, pero no se ofrece como campo editable.
+`GET /parcels/{id}/climate/` devuelve `period` (periodo solicitado), `queried_at`, `fetched_at`, `source`, `units`, `monthly`, `scenario` y `coverage`. Para cada variable de `coverage` se informan `valid_days`, `missing_days`, `total_days`, `coverage_percent`, `complete`, `first_valid_date`, `last_valid_date` y `missing_ranges`. Las fechas observadas son el primer y último día con valor diario numérico finito por encima del umbral de relleno `-900`; si no hay valores válidos, las dos fechas son `null`. La respuesta no incluye IDs de parcela, usuario ni correo.

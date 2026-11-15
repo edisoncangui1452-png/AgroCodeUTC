@@ -23,4 +23,10 @@ La lista exploratoria está limitada a parcelas con país `EC` en un **rectángu
 
 Hay fichas FAO precargadas pero **no profesionales ficticios**. Un administrador puede ampliar y validar fichas regionales con fuentes propias. El motor es una **heurística de coincidencia climática histórica**, no una puntuación ni una probabilidad de éxito. No analiza todavía altitud, suelo, requerimiento hídrico por ciclo ni interacción de cultivos; por tanto los candidatos requieren revisión local. La comparación de rotaciones señala familias consecutivas repetidas y fichas ausentes; no estima eficacia contra plagas, agua, cobertura o rentabilidad. La revisión con IA externa es opcional, se activa con `AGRO_AI_API_KEY`, solo admite HTTPS y envía nombres escritos de cultivos y familias de ficha, no coordenadas ni historial. Sus respuestas no están validadas. La guía en `?` es un listado local de respuestas comprobadas, no un modelo generativo.
 
-Hasta contar con límites geoespaciales y fichas locales validadas, los resultados son **solo orientativos**.
+La coincidencia de región se basa actualmente en texto escrito por el usuario, no en una delimitación agroecológica oficial. Hasta contar con límites geoespaciales validados, los resultados son **solo orientativos**.
+
+## Fases lunares
+
+El calendario independiente de 2026 usa SunCalc 2.1.4, cuyas fórmulas se basan en Astronomical Algorithms de Jean Meeus. Para cada fecha, consulta getMoonIllumination a las 12:00 hora local del navegador y utiliza su fracción iluminada y fase; el porcentaje visible se redondea al entero más cercano. El nombre de fase principal se muestra cuando la fase calculada queda dentro de una tolerancia de 0,5 días respecto de Luna nueva, cuarto creciente, Luna llena o cuarto menguante. La imagen se dibuja como SVG local a partir de la fracción y dirección de iluminación de SunCalc. La semana es ISO 8601 y comienza en lunes. No se usan datos NASA ni se ofrecen recomendaciones agronómicas. La librería proporciona una estimación astronómica calculada, no una medición NASA ni una observación del cielo en la parcela.
+
+Referencia de cálculo y API: [README oficial de SunCalc](https://github.com/mourner/suncalc/blob/master/README.md).

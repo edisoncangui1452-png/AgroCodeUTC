@@ -4,6 +4,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.middleware.csrf import get_token
 from django.utils.encoding import force_str
+from django.utils import timezone
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.conf import settings
@@ -22,7 +23,7 @@ from .serializers import (
     AgronomistSerializer, AnalysisSerializer, CropSerializer, HistorySerializer,
     ParcelSerializer, ProfileSerializer, RegisterSerializer, UserSerializer,
 )
-from .services import UNITS, available_years, get_climate, get_dashboard_metrics, get_historical_baseline, historical_scenario, monthly_summary, recommendations
+from .services import UNITS, available_years, daily_coverage, get_climate, historical_scenario, monthly_summary, recommendations
 
 User = get_user_model()
 
@@ -104,7 +105,7 @@ def password_reset(request):
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
         link = f"{settings.FRONTEND_ORIGIN}/restablecer/{uid}/{token}"
-        send_mail("Restablecer acceso a AgroFísica", f"Abre este enlace para cambiar tu contraseña:\n{link}", settings.DEFAULT_FROM_EMAIL, [user.email])
+        send_mail("Restablecer acceso a AgrocodeUTC", f"Abre este enlace para cambiar tu contraseña:\n{link}", settings.DEFAULT_FROM_EMAIL, [user.email])
     return Response({"detail": "Si el correo existe, recibirás instrucciones."})
 
 
@@ -244,10 +245,11 @@ class ParcelViewSet(viewsets.ModelViewSet):
         except (ValueError, requests.RequestException) as exc:
             return Response({"detail": f"No fue posible consultar NASA POWER: {exc}"}, status=503)
         result = {
-            "parcel": parcel.pk, "years": [start, end], "monthly": monthly,
+            "years": [start, end], "period": {"start": f"{start}-01-01", "end": f"{end}-12-31"},
+            "coverage": daily_coverage(values, start, end), "monthly": monthly,
             "scenario": historical_scenario(monthly), "units": UNITS, "cached": cached,
-            "crop_windows": recommendations(parcel, monthly),
-            "fetched_at": fetched_at, "source": "NASA POWER — daily point, comunidad AG",
+            "queried_at": timezone.now().isoformat(), "fetched_at": fetched_at,
+            "source": "NASA POWER — daily point, comunidad AG",
             "notice": "Estimaciones regionales, no mediciones dentro de la parcela. Tres años no permiten pronosticar.",
         }
         if request.method == "POST":
