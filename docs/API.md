@@ -25,3 +25,7 @@ Base: `/api/v1/`. JSON; sesiones Django con cookie HttpOnly. Para `POST`, `PUT`,
 | `agronomists/`, `agronomists/{id}/` | GET | Solo profesionales publicados |
 
 Las rutas `parcels`, `history` y `analyses` filtran por propietario incluso al solicitar un ID concreto. Una respuesta NASA puede demorar decenas de segundos; los errores del proveedor devuelven 503.
+
+## Respuesta climática
+
+`GET /parcels/{id}/climate/` devuelve `period` (periodo solicitado), `queried_at`, `fetched_at`, `source`, `units`, `monthly`, `scenario` y `coverage`. Para cada variable de `coverage` se informan `valid_days`, `missing_days`, `total_days`, `coverage_percent`, `complete`, `first_valid_date`, `last_valid_date` y `missing_ranges`. Las fechas observadas son el primer y último día con valor diario numérico finito por encima del umbral de relleno `-900`; si no hay valores válidos, las dos fechas son `null`. La respuesta no incluye IDs de parcela, usuario ni correo.

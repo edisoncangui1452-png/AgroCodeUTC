@@ -1,5 +1,6 @@
 import calendar
-from datetime import date
+from datetime import date, timedelta
+from math import isfinite
 from statistics import mean, pstdev
 
 import requests
@@ -107,6 +108,63 @@ def monthly_summary(values, start_year, end_year):
                 }.get(parameter, mean)
                 row[parameter] = round(aggregate(series), 2) if enough else None
             output.append(row)
+    return output
+
+
+def daily_coverage(values, start_year, end_year):
+    """Describe observed daily coverage without exposing the raw NASA payload."""
+    first = date(start_year, 1, 1)
+    last = date(end_year, 12, 31)
+    total_days = (last - first).days + 1
+    output = {}
+    for parameter in PARAMETERS:
+        valid_days = 0
+        first_valid_date = None
+        last_valid_date = None
+        missing_ranges = []
+        missing_start = None
+        missing_end = None
+        missing_count = 0
+
+        current = first
+        while current <= last:
+            value = values.get(parameter, {}).get(current.strftime("%Y%m%d"))
+            valid = isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value) and value > -900
+            if valid:
+                valid_days += 1
+                first_valid_date = first_valid_date or current
+                last_valid_date = current
+                if missing_start:
+                    missing_ranges.append({
+                        "start": missing_start.isoformat(),
+                        "end": missing_end.isoformat(),
+                        "days": missing_count,
+                    })
+                    missing_start = missing_end = None
+                    missing_count = 0
+            else:
+                missing_start = missing_start or current
+                missing_end = current
+                missing_count += 1
+            current += timedelta(days=1)
+
+        if missing_start:
+            missing_ranges.append({
+                "start": missing_start.isoformat(),
+                "end": missing_end.isoformat(),
+                "days": missing_count,
+            })
+        missing_days = total_days - valid_days
+        output[parameter] = {
+            "valid_days": valid_days,
+            "missing_days": missing_days,
+            "total_days": total_days,
+            "coverage_percent": round(valid_days * 100 / total_days, 2),
+            "complete": missing_days == 0,
+            "first_valid_date": first_valid_date.isoformat() if first_valid_date else None,
+            "last_valid_date": last_valid_date.isoformat() if last_valid_date else None,
+            "missing_ranges": missing_ranges,
+        }
     return output
 
 

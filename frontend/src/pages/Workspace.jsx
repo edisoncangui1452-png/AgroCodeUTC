@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CalendarDays, CloudSun, Database, Download, MapPin, MapPinned, Plus, RefreshCcw, Save, Search, Sprout, Trash2, Upload } from 'lucide-react'
-import { CartesianGrid, Legend, Line, LineChart, Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api, errorMessage } from '../api'
 import ParcelMap from '../components/ParcelMap'
+import ClimateReport from '../components/ClimateReport'
+import ClimateAssistant from '../components/ClimateAssistant'
+import ClimateRequestStatus from '../components/ClimateRequestStatus'
+import ClimateAdvanced from '../components/ClimateAdvanced'
+import { ClimateVisualSummary } from '../components/ClimateVisuals'
+import { LunarCalendar } from '../components/LunarCalendar'
+import CountrySelect from '../components/CountrySelect'
+import { toggleAdvancedMode } from '../climateInsights'
+import { usePreferences, translated } from '../preferences'
+import { formatParcelArea, selectedParcelArea } from '../parcelMetrics'
 
 function useParcels() {
   const [parcels, setParcels] = useState([])
@@ -16,37 +25,52 @@ function Heading({ eyebrow, title, description }) { return <div><div className="
 function Empty({ icon: Icon, title, text, to, action }) { return <div className="panel flex flex-col items-center py-14 text-center"><span className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-paper"><Icon size={28} /></span><h3 className="font-display text-xl font-bold">{title}</h3><p className="mt-2 max-w-md text-sm text-muted">{text}</p>{to && <Link to={to} className="button button-dark mt-6">{action} <ArrowRight size={16} /></Link>}</div> }
 function ParcelSelect({ parcels, value, onChange }) { return <select className="select" value={value} onChange={e => onChange(e.target.value)} aria-label="Seleccionar parcela"><option value="">Selecciona una parcela</option>{parcels.map(p => <option key={p.id} value={p.id}>{p.name} · {p.location || p.country}</option>)}</select> }
 
+function LunarCalendarAccess() {
+  const [open, setOpen] = useState(false)
+  const { language } = usePreferences()
+  return <>
+    <button type="button" className="button button-outline" onClick={() => setOpen(true)} aria-haspopup="dialog"><CalendarDays size={18} aria-hidden="true" /> {translated(language, 'Calendario lunar', 'Lunar calendar')}</button>
+    <LunarCalendar open={open} language={language} onClose={() => setOpen(false)} />
+  </>
+}
+
 export function Dashboard() {
   const { parcels, loading } = useParcels()
   const [analyses, setAnalyses] = useState([])
   useEffect(() => { api.get('analyses/').then(({ data }) => setAnalyses((data.results || data).slice(0, 4))).catch(() => {}) }, [])
   const parcel = parcels[0]
-  return <div><div className="flex flex-wrap items-end justify-between gap-4"><Heading eyebrow="TU ESPACIO DE TRABAJO" title="Una visión más clara de tu campo." description="Todos los datos de tu terreno, su clima y tus decisiones en un mismo lugar." /><Link to="/parcelas" className="button button-dark"><Plus size={17} /> Nueva parcela</Link></div>{loading ? <p className="mt-10">Cargando parcelas…</p> : !parcel ? <div className="mt-9"><Empty icon={MapPinned} title="Tu historia empieza con un lugar" text="Dibuja tu primera parcela para explorar su clima histórico con datos de NASA." to="/parcelas" action="Crear mi parcela" /></div> : <><div className="mt-9 grid gap-4 md:grid-cols-3"><div className="stat"><MapPin size={20} /><span className="mt-6 text-sm text-muted">Parcela activa</span><strong>{parcel.name}</strong><span className="text-xs text-muted">{parcel.location || parcel.country}</span></div><div className="stat"><MapPinned size={20} /><span className="mt-6 text-sm text-muted">Superficie geodésica</span><strong>{parcel.area_ha.toFixed(2)} ha</strong><span className="text-xs text-muted">Calculada a partir del polígono</span></div><div className="stat"><CloudSun size={20} /><span className="mt-6 text-sm text-muted">Historial climático</span><strong>3 años</strong><Link className="text-xs font-bold underline" to="/clima">Explorar datos NASA <ArrowRight className="inline" size={12} /></Link></div></div><div className="mt-5 grid gap-5 lg:grid-cols-[1.5fr_1fr]"><div className="panel overflow-hidden p-0"><div className="flex items-center justify-between p-6"><h2 className="text-xl font-bold">Tu terreno</h2><Link className="text-sm font-bold underline" to="/parcelas">Ver parcela</Link></div><div className="h-[320px]"><ParcelMap geometry={parcel.geometry} point={[parcel.latitude, parcel.longitude]} /></div></div><div className="panel"><h2 className="text-xl font-bold">Explora tus opciones</h2><p className="mt-2 text-sm text-muted">Conoce qué indican los datos y qué información falta para decidir mejor.</p><div className="mt-8 space-y-3"><Link to="/clima" className="action-row"><CloudSun size={20} /> Comparar clima <ArrowRight size={16} className="ml-auto" /></Link><Link to="/agricultura" className="action-row"><Sprout size={20} /> Cultivos y rotaciones <ArrowRight size={16} className="ml-auto" /></Link><Link to="/historial" className="action-row"><Database size={20} /> Mi historial <ArrowRight size={16} className="ml-auto" /></Link></div></div></div><div className="mt-6"><h2 className="mb-4 text-xl font-bold">Análisis recientes</h2>{analyses.length ? <div className="grid gap-3 md:grid-cols-2">{analyses.map(a => <div className="panel" key={a.id}><span className="text-xs uppercase text-muted">{a.kind}</span><h3 className="mt-2 font-bold">{a.title}</h3><span className="text-xs text-muted">{new Date(a.created_at).toLocaleDateString('es')}</span></div>)}</div> : <p className="text-sm text-muted">Todavía no hay análisis guardados.</p>}</div></>}</div>
+  const parcelAreaDisplay = parcel ? formatParcelArea(parcel.geometry, parcel.area_ha) : null
+  return <div><div className="mb-5 flex justify-end"><LunarCalendarAccess /></div><div className="flex flex-wrap items-end justify-between gap-4"><Heading eyebrow="TU ESPACIO DE TRABAJO" title="Una visión más clara de tu campo." description="Todos los datos de tu terreno, su clima y tus decisiones en un mismo lugar." /><Link to="/parcelas" className="button button-dark"><Plus size={17} /> Nueva parcela</Link></div>{loading ? <p className="mt-10">Cargando parcelas…</p> : !parcel ? <div className="mt-9"><Empty icon={MapPinned} title="Tu historia empieza con un lugar" text="Dibuja tu primera parcela para explorar su clima histórico con datos de NASA." to="/parcelas" action="Crear mi parcela" /></div> : <><div className="mt-9 grid gap-4 md:grid-cols-3"><div className="stat"><MapPin size={20} /><span className="mt-6 text-sm text-muted">Parcela activa</span><strong>{parcel.name}</strong><span className="text-xs text-muted">{parcel.location || parcel.country}</span></div><div className="stat"><MapPinned size={20} /><span className="mt-6 text-sm text-muted">Superficie geodésica</span><strong>{parcelAreaDisplay ? parcelAreaDisplay.hectares + " ha" : "Área no disponible"}</strong><span className="text-xs text-muted">Calculada a partir del polígono</span></div><div className="stat"><CloudSun size={20} /><span className="mt-6 text-sm text-muted">Historial climático</span><strong>3 años</strong><Link className="text-xs font-bold underline" to="/clima">Explorar datos NASA <ArrowRight className="inline" size={12} /></Link></div></div><div className="mt-5 grid gap-5 lg:grid-cols-[1.5fr_1fr]"><div className="panel overflow-hidden p-0"><div className="flex items-center justify-between p-6"><h2 className="text-xl font-bold">Tu terreno</h2><Link className="text-sm font-bold underline" to="/parcelas">Ver parcela</Link></div><div className="h-[320px]"><ParcelMap geometry={parcel.geometry} point={[parcel.latitude, parcel.longitude]} /></div></div><div className="panel"><h2 className="text-xl font-bold">Explora tus opciones</h2><p className="mt-2 text-sm text-muted">Conoce qué indican los datos y qué información falta para decidir mejor.</p><div className="mt-8 space-y-3"><Link to="/clima" className="action-row"><CloudSun size={20} /> Comparar clima <ArrowRight size={16} className="ml-auto" /></Link><Link to="/agricultura" className="action-row"><Sprout size={20} /> Cultivos y rotaciones <ArrowRight size={16} className="ml-auto" /></Link><Link to="/historial" className="action-row"><Database size={20} /> Mi historial <ArrowRight size={16} className="ml-auto" /></Link></div></div></div><div className="mt-6"><h2 className="mb-4 text-xl font-bold">Análisis recientes</h2>{analyses.length ? <div className="grid gap-3 md:grid-cols-2">{analyses.map(a => <div className="panel" key={a.id}><span className="text-xs uppercase text-muted">{a.kind}</span><h3 className="mt-2 font-bold">{a.title}</h3><span className="text-xs text-muted">{new Date(a.created_at).toLocaleDateString('es')}</span></div>)}</div> : <p className="text-sm text-muted">Todavía no hay análisis guardados.</p>}</div></>}</div>
 }
 
 export function ParcelsPage() {
+  const { language } = usePreferences()
   const { parcels, loading, reload } = useParcels()
   const [selected, setSelected] = useState('')
   const [geometry, setGeometry] = useState(null)
   const [point, setPoint] = useState(null)
   const [name, setName] = useState('')
-  const [country, setCountry] = useState('EC')
+  const [country, setCountry] = useState('')
+  const [countryTouched, setCountryTouched] = useState(false)
   const [location, setLocation] = useState('Sierra ecuatoriana')
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState('')
   const [satellite, setSatellite] = useState(false)
   const [date, setDate] = useState(new Date(Date.now() - 4 * 86400000).toISOString().slice(0, 10))
   const [profile, setProfile] = useState({ soil_texture: '', water_availability: '', irrigation: '', current_crop: '', notes: '' })
+  const selectedParcel = parcels.find(parcel => String(parcel.id) === String(selected))
+  const selectedArea = selectedParcelArea(parcels, selected, geometry, language === 'en' ? 'en' : 'es')
   const onGeometry = useCallback(g => setGeometry(g), [])
   const onPoint = useCallback(p => setPoint(p), [])
   function choose(id) {
     setSelected(id)
+    setCountryTouched(false)
     const p = parcels.find(x => String(x.id) === String(id))
     if (p) { setName(p.name); setCountry(p.country); setLocation(p.location); setGeometry(p.geometry); setPoint([p.latitude, p.longitude]); api.get(`parcels/${id}/profile/`).then(({ data }) => setProfile(data)).catch(() => {}) }
-    else { setName(''); setGeometry(null); setPoint(null); setProfile({ soil_texture: '', water_availability: '', irrigation: '', current_crop: '', notes: '' }) }
+    else { setName(''); setCountry(''); setCountryTouched(false); setGeometry(null); setPoint(null); setProfile({ soil_texture: '', water_availability: '', irrigation: '', current_crop: '', notes: '' }) }
   }
   async function save(e) {
-    e.preventDefault(); setNotice('')
+    e.preventDefault(); setNotice(''); setCountryTouched(true)
     try {
       if (!geometry) throw new Error('Dibuja o importa un polígono primero.')
       const payload = { name, country, location, geometry }
@@ -75,35 +99,96 @@ export function ParcelsPage() {
   }
   function exportFile() { const url = URL.createObjectURL(new Blob([JSON.stringify({ type: 'Feature', properties: { name }, geometry }, null, 2)], { type: 'application/geo+json' })); const a = document.createElement('a'); a.href = url; a.download = 'parcela.geojson'; a.click(); URL.revokeObjectURL(url) }
   function locate() { navigator.geolocation?.getCurrentPosition(pos => setPoint([pos.coords.latitude, pos.coords.longitude]), () => setNotice('No se pudo obtener tu ubicación. Puedes introducir coordenadas manualmente.')) }
-  return <div><Heading eyebrow="01 / TU TERRENO" title="Mis parcelas" description="Dibuja, edita y guarda tu terreno. El área se calcula geodésicamente en el servidor." /><div className="mt-8 grid gap-6 xl:grid-cols-[1fr_360px]"><div><div className="mb-3 flex flex-wrap gap-2"><input className="input min-w-0 flex-1" placeholder="Buscar lugar (ej. Riobamba, Ecuador)" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && find()} /><button className="button button-outline" onClick={find}><Search size={17} /> Buscar</button><button className="button button-outline" onClick={locate}><MapPin size={17} /> Ubicarme</button></div><div className="overflow-hidden rounded-2xl border border-line bg-white"><div className="h-[480px]"><ParcelMap geometry={geometry} onChange={onGeometry} point={point} onPoint={onPoint} satellite={satellite} date={date} /></div><div className="flex flex-wrap items-center gap-3 border-t border-line p-4 text-xs"><label className="flex items-center gap-2"><input type="checkbox" checked={satellite} onChange={e => setSatellite(e.target.checked)} /> NASA GIBS (MODIS Terra)</label>{satellite && <label>Fecha <input className="input ml-2 !w-auto !py-1" type="date" value={date} onChange={e => setDate(e.target.value)} /></label>}<span className="ml-auto text-muted">Imágenes satelitales, no mediciones de parcela.</span></div></div><div className="mt-4 flex flex-wrap items-center gap-3 text-sm"><label className="button button-outline cursor-pointer"><Upload size={16} /> Importar GeoJSON<input className="hidden" type="file" accept=".json,.geojson,application/geo+json" onChange={importFile} /></label><button className="button button-outline" disabled={!geometry} onClick={exportFile}><Download size={16} /> Exportar</button><span className="text-muted">Usa la barra del mapa para dibujar o editar polígonos.</span></div></div><div className="panel h-fit"><h2 className="text-xl font-bold">Datos de parcela</h2><label className="field mt-5">Parcela guardada<ParcelSelect parcels={parcels} value={selected} onChange={choose} /></label>{loading && <p className="text-xs text-muted">Cargando…</p>}<form className="mt-5 space-y-4" onSubmit={save}><label className="field">Nombre<input required value={name} onChange={e => setName(e.target.value)} placeholder="Mi parcela" /></label><div className="grid grid-cols-2 gap-3"><label className="field">País ISO<input required maxLength={2} value={country} onChange={e => setCountry(e.target.value.toUpperCase())} placeholder="EC" /></label><label className="field">Región documentada<input value={location} onChange={e => setLocation(e.target.value)} placeholder="Sierra ecuatoriana" /></label></div><div className="grid grid-cols-2 gap-3"><label className="field">Latitud<input type="number" step="any" value={point?.[0] ?? ''} onChange={e => setPoint([Number(e.target.value), point?.[1] || 0])} /></label><label className="field">Longitud<input type="number" step="any" value={point?.[1] ?? ''} onChange={e => setPoint([point?.[0] || 0, Number(e.target.value)])} /></label></div><p className="text-xs text-muted">Las coordenadas manuales mueven el mapa; para guardar debes dibujar un polígono. NASA recibirá el punto representativo cuando consultes su clima.</p><details className="border-t border-line pt-4"><summary className="cursor-pointer font-semibold">Perfil agronómico (opcional)</summary><div className="mt-4 space-y-3">{[['current_crop', 'Cultivo actual'], ['soil_texture', 'Textura del suelo'], ['water_availability', 'Agua disponible'], ['irrigation', 'Riego'], ['notes', 'Observaciones']].map(([key, label]) => <label className="field" key={key}>{label}<input value={profile[key] || ''} placeholder="No lo sé" onChange={e => setProfile({ ...profile, [key]: e.target.value })} /></label>)}</div></details><button className="button button-dark w-full"><Save size={17} /> Guardar parcela</button>{selected && <button type="button" className="button button-outline w-full" onClick={remove}><Trash2 size={16} /> Eliminar parcela</button>}</form>{notice && <p role="status" className="notice mt-4">{notice}</p>}</div></div></div>
+  return <div><Heading eyebrow="01 / TU TERRENO" title="Mis parcelas" description="Dibuja, edita y guarda tu terreno. El área se calcula geodésicamente en el servidor." /><div className="mt-8 grid gap-6 xl:grid-cols-[1fr_360px]"><div><div className="mb-3 flex flex-wrap gap-2"><input className="input min-w-0 flex-1" placeholder="Buscar lugar (ej. Riobamba, Ecuador)" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && find()} /><button className="button button-outline" onClick={find}><Search size={17} /> Buscar</button><button className="button button-outline" onClick={locate}><MapPin size={17} /> Ubicarme</button></div><div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-white p-4 text-sm"><span className="font-semibold">Área de la parcela seleccionada</span>{selectedParcel ? (selectedArea ? <strong>Área: {selectedArea.hectares} ha ({selectedArea.squareMeters} m²)</strong> : <strong>Área no disponible</strong>) : <span className="text-muted">Selecciona una parcela guardada para consultar su área.</span>}</div><div className="overflow-hidden rounded-2xl border border-line bg-white"><div className="h-[480px]"><ParcelMap geometry={geometry} onChange={onGeometry} point={point} onPoint={onPoint} satellite={satellite} date={date} /></div><div className="flex flex-wrap items-center gap-3 border-t border-line p-4 text-xs"><label className="flex items-center gap-2"><input type="checkbox" checked={satellite} onChange={e => setSatellite(e.target.checked)} /> NASA GIBS (MODIS Terra)</label>{satellite && <label>Fecha <input className="input ml-2 !w-auto !py-1" type="date" value={date} onChange={e => setDate(e.target.value)} /></label>}<span className="ml-auto text-muted">Imágenes satelitales, no mediciones de parcela.</span></div></div><div className="mt-4 flex flex-wrap items-center gap-3 text-sm"><label className="button button-outline cursor-pointer"><Upload size={16} /> Importar GeoJSON<input className="hidden" type="file" accept=".json,.geojson,application/geo+json" onChange={importFile} /></label><button className="button button-outline" disabled={!geometry} onClick={exportFile}><Download size={16} /> Exportar</button><span className="text-muted">Usa la barra del mapa para dibujar o editar polígonos.</span></div></div><div className="panel h-fit"><h2 className="text-xl font-bold">Datos de parcela</h2><label className="field mt-5">Parcela guardada<ParcelSelect parcels={parcels} value={selected} onChange={choose} /></label>{loading && <p className="text-xs text-muted">Cargando…</p>}<form className="mt-5 space-y-4" onSubmit={save}><label className="field">Nombre<input required value={name} onChange={e => setName(e.target.value)} placeholder="Mi parcela" /></label><div className="grid grid-cols-2 gap-3"><CountrySelect value={country} language={language} invalid={countryTouched && !country} onChange={setCountry} onBlur={() => setCountryTouched(true)} /><label className="field">Región documentada<input value={location} onChange={e => setLocation(e.target.value)} placeholder="Sierra ecuatoriana" /></label></div><div className="grid grid-cols-2 gap-3"><label className="field">Latitud<input type="number" step="any" value={point?.[0] ?? ''} onChange={e => setPoint([Number(e.target.value), point?.[1] || 0])} /></label><label className="field">Longitud<input type="number" step="any" value={point?.[1] ?? ''} onChange={e => setPoint([point?.[0] || 0, Number(e.target.value)])} /></label></div><p className="text-xs text-muted">Las coordenadas manuales mueven el mapa; para guardar debes dibujar un polígono. NASA recibirá el punto representativo cuando consultes su clima.</p><details className="border-t border-line pt-4"><summary className="cursor-pointer font-semibold">Perfil agronómico (opcional)</summary><div className="mt-4 space-y-3">{[['current_crop', 'Cultivo actual'], ['soil_texture', 'Textura del suelo'], ['water_availability', 'Agua disponible'], ['irrigation', 'Riego'], ['notes', 'Observaciones']].map(([key, label]) => <label className="field" key={key}>{label}<input value={profile[key] || ''} placeholder="No lo sé" onChange={e => setProfile({ ...profile, [key]: e.target.value })} /></label>)}</div></details><button className="button button-dark w-full"><Save size={17} /> Guardar parcela</button>{selected && <button type="button" className="button button-outline w-full" onClick={remove}><Trash2 size={16} /> Eliminar parcela</button>}</form>{notice && <p role="status" className="notice mt-4">{notice}</p>}</div></div></div>
 }
 
-const chartVariables = [
-  ['T2M', 'Temperatura media', '°C'], ['T2M_MAX', 'Temperatura máxima', '°C'], ['T2M_MIN', 'Temperatura mínima', '°C'],
-  ['PRECTOTCORR', 'Precipitación acumulada', 'mm/mes'], ['RH2M', 'Humedad', '%'],
-  ['ALLSKY_SFC_SW_DWN', 'Radiación solar', 'MJ/m²/día'], ['WS2M', 'Velocidad del viento', 'm/s'],
-]
 const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
 export function ClimatePage() {
+  const { language } = usePreferences()
+  const english = language === 'en'
   const { parcels } = useParcels()
   const [id, setId] = useState('')
   const [result, setResult] = useState(null)
   const [variable, setVariable] = useState('T2M')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [requestError, setRequestError] = useState(false)
+  const [advanced, setAdvanced] = useState(false)
   const [endYear, setEndYear] = useState(new Date().getFullYear() - 1)
+  const selectedParcel = parcels.find(parcel => String(parcel.id) === String(id))
   async function load(save = false) {
-    if (!id) return
-    setBusy(true); setMessage('')
-    try { const { data } = await api[save ? 'post' : 'get'](`parcels/${id}/climate/`, save ? { start_year: endYear - 2, end_year: endYear } : { params: { start_year: endYear - 2, end_year: endYear } }); setResult(data); if (save) setMessage('Análisis guardado en tu historial.') }
-    catch (err) { setMessage(errorMessage(err)) } finally { setBusy(false) }
+    if (!id || busy) return
+    setBusy(true)
+    setMessage('')
+    setRequestError(false)
+    if (!save) setResult(null)
+    const path = 'parcels/' + id + '/climate/'
+    const params = { start_year: endYear - 2, end_year: endYear }
+    try {
+      const { data } = await api[save ? 'post' : 'get'](path, save ? params : { params })
+      setResult(data)
+      if (save) setMessage(translated(language, 'Análisis guardado en tu historial.', 'Analysis saved to your history.'))
+    } catch (error) {
+      if (save) setMessage(translated(language, 'No se pudo guardar el análisis. Inténtalo de nuevo.', 'The analysis could not be saved. Please try again.'))
+      else setRequestError(true)
+    } finally {
+      setBusy(false)
+    }
   }
-  const years = result ? [...new Set(result.monthly.map(r => r.year))] : []
-  const chartData = monthNames.map((month, i) => ({ month, ...Object.fromEntries(years.map(year => [year, result.monthly.find(r => r.year === year && r.month === i + 1)?.[variable]])) }))
-  const selected = chartVariables.find(v => v[0] === variable)
-  return <div><Heading eyebrow="02 / DATOS NASA" title="Historial climático" description="Compara mes a mes hasta tres años calendario completos. Son datos regionales, no sensores en tu parcela." />{!parcels.length ? <div className="mt-8"><Empty icon={MapPinned} title="Primero crea una parcela" text="Necesitamos una ubicación para consultar NASA POWER." to="/parcelas" action="Ir a mis parcelas" /></div> : <><div className="panel mt-8 flex flex-wrap items-end gap-3"><label className="field flex-1">Parcela<ParcelSelect parcels={parcels} value={id} onChange={setId} /></label><label className="field">Último año<input type="number" className="!w-28" min="1983" max={new Date().getFullYear() - 1} value={endYear} onChange={e => setEndYear(Number(e.target.value))} /></label><button className="button button-dark" disabled={!id || busy} onClick={() => load()}><RefreshCcw size={16} /> {busy ? 'Consultando NASA…' : 'Consultar datos'}</button></div>{message && <p role="status" className="notice mt-4">{message}</p>}{result && <><div className="mt-6 grid gap-3 sm:grid-cols-3"><div className="stat"><span className="text-sm text-muted">Periodo comparado</span><strong>{years.join(' · ')}</strong></div><div className="stat"><span className="text-sm text-muted">Fuente</span><strong className="!text-lg">NASA POWER</strong><span className="text-xs text-muted">{result.cached ? 'Desde caché' : 'Consulta reciente'}</span></div><div className="stat"><span className="text-sm text-muted">Cobertura</span><strong>Datos diarios</strong><span className="text-xs text-muted">Lluvia: mes completo; otras variables: ≥80 % de días válidos</span></div></div><div className="panel mt-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">Comparación mensual</h2><p className="mt-1 text-sm text-muted">{selected[1]} · {selected[2]}</p></div><select className="select !w-auto" value={variable} onChange={e => setVariable(e.target.value)}>{chartVariables.map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></div><div className="mt-8 h-[320px] w-full"><ResponsiveContainer width="100%" height="100%">{variable === 'PRECTOTCORR' ? <BarChart data={chartData}><CartesianGrid stroke="#eee" vertical={false} /><XAxis dataKey="month" /><YAxis /><Tooltip /><Legend />{years.map((y, i) => <Bar key={y} dataKey={String(y)} fill={['#161616', '#888888', '#c4c4c4'][i]} />)}</BarChart> : <LineChart data={chartData}><CartesianGrid stroke="#eee" vertical={false} /><XAxis dataKey="month" /><YAxis /><Tooltip /><Legend />{years.map((y, i) => <Line key={y} type="monotone" dataKey={String(y)} stroke={['#161616', '#777777', '#bababa'][i]} strokeWidth={3} connectNulls={false} />)}</LineChart>}</ResponsiveContainer></div></div><div className="panel mt-5"><h2 className="text-xl font-bold">Escenario orientativo</h2><p className="mt-2 text-sm text-muted">Rango observado en tres años; no es un pronóstico. Tres años no permiten establecer una tendencia climática robusta.</p><div className="mt-5 grid gap-2 sm:grid-cols-3 lg:grid-cols-4">{result.scenario.map(s => <div key={s.month} className="rounded-xl bg-paper p-4"><strong>{monthNames[s.month - 1]}</strong><p className="mt-2 text-sm">T: {s.T2M ? `${s.T2M.min}–${s.T2M.max} °C` : 'Sin datos suficientes'}</p><p className="text-sm text-muted">Lluvia: {s.PRECTOTCORR ? `${s.PRECTOTCORR.min}–${s.PRECTOTCORR.max} mm` : 'Sin datos suficientes'}</p></div>)}</div></div><div className="panel mt-5 overflow-x-auto"><h2 className="mb-5 text-xl font-bold">Tabla comparativa</h2><table className="w-full min-w-[650px] text-left text-sm"><thead><tr className="border-b border-line text-muted">{['Año', 'Mes', 'Temp. °C', 'Máx. °C', 'Mín. °C', 'Lluvia mm', 'Humedad %', 'Días válidos'].map(h => <th className="pb-3 pr-4" key={h}>{h}</th>)}</tr></thead><tbody>{result.monthly.map(r => <tr className="border-b border-line/60" key={`${r.year}-${r.month}`}><td className="py-2">{r.year}</td><td>{monthNames[r.month - 1]}</td><td>{r.T2M ?? '—'}</td><td>{r.T2M_MAX ?? '—'}</td><td>{r.T2M_MIN ?? '—'}</td><td>{r.PRECTOTCORR ?? '—'}</td><td>{r.RH2M ?? '—'}</td><td>{r.coverage.T2M}/{r.days}</td></tr>)}</tbody></table></div><button className="button button-dark mt-5" onClick={() => load(true)} disabled={busy}><Save size={17} /> Guardar este análisis</button><p className="mt-4 text-xs text-muted">Fuente: {result.source}. Consultado: {new Date(result.fetched_at).toLocaleString('es')}. {result.notice}</p></>}</>}</div>
-}
 
+  const years = result ? [...new Set(result.monthly.map(row => row.year))] : []
+  return <div>
+    <Heading
+      eyebrow={translated(language, '02 / DATOS NASA', '02 / NASA DATA')}
+      title={translated(language, 'Historial climático', 'Historical climate')}
+      description={translated(language, 'Consulta hasta tres años calendario completos. Son estimaciones regionales, no mediciones dentro de tu parcela.', 'Query up to three complete calendar years. These are regional estimates, not measurements inside your parcel.')}
+    />
+    {!parcels.length ? <div className="mt-8">
+      <Empty icon={MapPinned} title={translated(language, 'Primero crea una parcela', 'Create a parcel first')} text={translated(language, 'Necesitamos una ubicación registrada para consultar NASA POWER.', 'A registered location is needed to query NASA POWER.')} to="/parcelas" action={translated(language, 'Ir a mis parcelas', 'Go to my parcels')} />
+    </div> : <>
+      <div className="panel mt-8 flex flex-wrap items-end gap-3">
+        <label className="field min-w-[200px] flex-1">{translated(language, 'Parcela', 'Parcel')}
+          <ParcelSelect parcels={parcels} value={id} onChange={value => { setId(value); setResult(null); setMessage(''); setRequestError(false) }} />
+        </label>
+        <label className="field">{translated(language, 'Último año completo', 'Last complete year')}
+          <input type="number" className="!w-32" min="1983" max={new Date().getFullYear() - 1} value={endYear} onChange={event => { setEndYear(Number(event.target.value)); setResult(null); setRequestError(false) }} />
+        </label>
+        <button type="button" className="button button-dark" disabled={!id || busy} onClick={() => load()}>
+          <RefreshCcw size={18} aria-hidden="true" /> {busy ? translated(language, 'Consultando…', 'Querying…') : translated(language, 'Consultar y generar ficha', 'Query and create report')}
+        </button>
+      </div>
+
+      <ClimateRequestStatus state={busy ? 'loading' : requestError ? 'error' : (!result ? 'empty' : 'hidden')} selectedParcel={selectedParcel} onRetry={() => load()} language={language} />
+      {message && <p role="status" className="notice mt-4">{message}</p>}
+
+      {result && selectedParcel && <>
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="stat"><span className="text-sm text-muted">{translated(language, 'Periodo consultado', 'Period queried')}</span><strong>{years.join(' · ')}</strong></div>
+          <div className="stat"><span className="text-sm text-muted">{translated(language, 'Fuente', 'Source')}</span><strong className="!text-lg">NASA POWER</strong><span className="text-xs text-muted">{result.cached ? translated(language, 'Desde caché', 'From cache') : translated(language, 'Consulta reciente', 'Recent query')}</span></div>
+          <div className="stat"><span className="text-sm text-muted">{translated(language, 'Cobertura', 'Coverage')}</span><strong>{Object.values(result.coverage || {}).every(item => item.complete) ? translated(language, 'Completa', 'Complete') : translated(language, 'Revisar faltantes', 'Review missing data')}</strong><span className="text-xs text-muted">{translated(language, 'La ficha detalla días y fechas por variable.', 'The report lists days and dates for each variable.')}</span></div>
+        </div>
+
+        <ClimateAdvanced
+          open={advanced}
+          result={result}
+          language={language}
+          variable={variable}
+          onVariableChange={setVariable}
+          onToggle={() => setAdvanced(toggleAdvancedMode)}
+        />
+        <ClimateVisualSummary result={result} language={language} />
+
+
+        <ClimateReport parcel={selectedParcel} result={result} />
+        <ClimateAssistant parcel={selectedParcel} result={result} />
+        <button type="button" className="button button-outline mt-5 no-print" onClick={() => load(true)} disabled={busy}>
+          <Save size={18} aria-hidden="true" /> {translated(language, 'Guardar este análisis', 'Save this analysis')}
+        </button>
+      </>}
+    </>}
+  </div>
+}
 export function AgriculturePage() {
   const { parcels } = useParcels()
   const [id, setId] = useState('')

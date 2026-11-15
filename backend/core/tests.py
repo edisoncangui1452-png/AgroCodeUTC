@@ -5,7 +5,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from .models import Analysis, Crop, Parcel
-from .services import PARAMETERS, monthly_summary, recommendations, validate_geometry
+from .services import PARAMETERS, daily_coverage, monthly_summary, recommendations, validate_geometry
 
 POLYGON = {"type": "Polygon", "coordinates": [[[-78.65, -1.67], [-78.64, -1.67], [-78.64, -1.66], [-78.65, -1.66], [-78.65, -1.67]]]}
 
@@ -67,6 +67,21 @@ class ParcelTests(TestCase):
         del data["PRECTOTCORR"]["20230131"]
         self.assertIsNone(monthly_summary(data, 2023, 2023)[0]["PRECTOTCORR"])
 
+    def test_daily_coverage_counts_missing_ranges_and_fill_values(self):
+        data = {name: {} for name in PARAMETERS}
+        data["T2M"] = {"20230101": 12, "20230102": -999, "20230104": 14}
+        coverage = daily_coverage(data, 2023, 2023)
+        self.assertEqual(coverage["T2M"]["valid_days"], 2)
+        self.assertEqual(coverage["T2M"]["missing_days"], 363)
+        self.assertEqual(coverage["T2M"]["missing_ranges"][0], {
+            "start": "2023-01-02", "end": "2023-01-03", "days": 2,
+        })
+        self.assertEqual(coverage["T2M"]["coverage_percent"], 0.55)
+        self.assertFalse(coverage["T2M"]["complete"])
+        self.assertEqual(coverage["T2M"]["first_valid_date"], "2023-01-01")
+        self.assertEqual(coverage["T2M"]["last_valid_date"], "2023-01-04")
+        self.assertEqual(coverage["PRECTOTCORR"]["total_days"], 365)
+
     @patch("core.views.get_climate")
     def test_climate_saves_only_own_analysis(self, get_climate):
         get_climate.return_value = ({p: {} for p in PARAMETERS}, True, "2026-01-01T00:00:00Z")
@@ -75,6 +90,21 @@ class ParcelTests(TestCase):
         self.assertEqual(Analysis.objects.filter(owner=self.alice).count(), 1)
         self.client.force_authenticate(self.bob)
         self.assertEqual(self.client.get("/api/v1/analyses/").data, [])
+
+    @patch("core.views.get_climate")
+    def test_climate_report_contract_has_coverage_without_user_or_parcel_ids(self, get_climate):
+        get_climate.return_value = ({p: {"20230101": 1} for p in PARAMETERS}, True, "2026-01-01T00:00:00Z")
+        response = self.client.get(f"/api/v1/parcels/{self.parcel.pk}/climate/", {"start_year": 2023, "end_year": 2023})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["period"], {"start": "2023-01-01", "end": "2023-12-31"})
+        self.assertTrue(response.data["queried_at"])
+        self.assertEqual(response.data["coverage"]["T2M"]["valid_days"], 1)
+        self.assertEqual(response.data["coverage"]["T2M"]["first_valid_date"], "2023-01-01")
+        self.assertEqual(response.data["coverage"]["T2M"]["last_valid_date"], "2023-01-01")
+        self.assertFalse(response.data["coverage"]["T2M"]["complete"])
+        self.assertNotIn("parcel", response.data)
+        self.assertNotIn("owner", response.data)
+        self.assertNotIn("email", response.data)
 
     def test_unsupported_region_not_recommended(self):
         Crop.objects.create(name="Prueba", family="Fabaceae", region="Sierra ecuatoriana", country_code="EC", min_temp_c=5, max_temp_c=30, cycle_days=100, validated=True)

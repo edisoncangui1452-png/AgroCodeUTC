@@ -2,44 +2,344 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { font-family: 'DM Sans', sans-serif; color: #161616; background: #f7f7f5; font-synthesis: none; }
+:root {
+  color-scheme: light;
+  --brand-rgb: 37 79 53;
+  --muted-rgb: 76 101 83;
+  --paper-rgb: 245 243 229;
+  --line-rgb: 210 216 198;
+  --on-brand: #ffffff;
+  --brand-hover: #1f623c;
+  --text-primary: #273c2e;
+  --surface: #fffef8;
+  --surface-alt: #f5f2e5;
+  --surface-raised: #fffefa;
+  --earth: #94602f;
+  --earth-soft: #f3e5cf;
+  --leaf: #3f7652;
+  --leaf-soft: #e4eedf;
+  --sky-soft: #e5f0f2;
+  --lunar-banner: #15558b;
+  --lunar-banner-text: #ffffff;
+  --lunar-outline: #15558b;
+  --moon-shadow: #05070b;
+  --moon-lit: #f3f4ee;
+  --warning: #82500a;
+  --warning-surface: #fff3dc;
+  --success: #286443;
+  --success-surface: #eaf3e7;
+  --focus: #1e6941;
+  --map-field: #34734a;
+  --chart-1: #34704b;
+  --chart-2: #a96f39;
+  --chart-3: #518b8a;
+  --chart-grid: #b6c4b6;
+  --shadow-color: 29 52 34;
+  --field-deep: #214a34;
+  --field-middle: #365e43;
+  --field-light: #557451;
+  --hero-grid-line: rgb(255 255 255 / .12);
+  --hero-orbit: rgb(255 255 255 / .32);
+  --hero-orbit-soft: rgb(255 255 255 / .19);
+  --hero-shadow: rgb(255 255 255 / .16);
+  font-family: 'DM Sans', sans-serif;
+  color: var(--text-primary);
+  background: rgb(var(--paper-rgb));
+  font-synthesis: none;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --muted-rgb: 190 208 190;
+  --paper-rgb: 20 34 25;
+  --line-rgb: 65 91 70;
+  --text-primary: #edf4e9;
+  --surface: #203528;
+  --surface-alt: #263d2d;
+  --surface-raised: #2a4432;
+  --earth: #e0b27b;
+  --earth-soft: #473724;
+  --leaf: #9cc696;
+  --leaf-soft: #2d4933;
+  --sky-soft: #263f43;
+  --lunar-banner: #286b98;
+  --lunar-banner-text: #ffffff;
+  --lunar-outline: #61b7e8;
+  --moon-shadow: #05070b;
+  --moon-lit: #f3f4ee;
+  --warning: #f2c987;
+  --warning-surface: #443720;
+  --success: #a7d0a4;
+  --success-surface: #294331;
+  --focus: #9cd7a7;
+  --brand-hover: #28583a;
+  --map-field: #9bc890;
+  --chart-1: #9bc890;
+  --chart-2: #e0b27b;
+  --chart-3: #88c8c4;
+  --chart-grid: #49634f;
+  --shadow-color: 0 0 0;
+}
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html { font-size: 16px; scroll-behavior: smooth; }
+body { min-width: 320px; color: var(--text-primary); background: rgb(var(--paper-rgb)); }
 button, input, select, textarea { font: inherit; }
+button, a, input, select, textarea, summary { -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
-button:disabled { opacity: .5; cursor: not-allowed; }
+button:disabled { opacity: .55; cursor: not-allowed; }
 em { font-family: Georgia, serif; font-weight: 400; }
-::selection { background: #161616; color: white; }
+::selection { background: rgb(var(--brand-rgb)); color: var(--on-brand); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+.text-ink { color: var(--text-primary) !important; }
+.text-muted { color: rgb(var(--muted-rgb)) !important; }
+.bg-white, .bg-white\/90, .bg-white\/95 { background-color: var(--surface) !important; color: var(--text-primary); }
 .logo { display: inline-flex; align-items: center; gap: .65rem; font-family: Manrope, sans-serif; font-weight: 800; font-size: 1.23rem; letter-spacing: -.06em; white-space: nowrap; }
-.logo-mark { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; }
-.button { display: inline-flex; align-items: center; justify-content: center; gap: .65rem; min-height: 46px; border-radius: 10px; padding: .72rem 1.15rem; font-size: .875rem; font-weight: 700; transition: transform .2s, background .2s; white-space: nowrap; }
+.logo-mark { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 13px; background: rgb(var(--brand-rgb)); color: var(--on-brand); }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: .65rem; min-height: 46px; border-radius: 12px; padding: .72rem 1.15rem; font-size: 1rem; font-weight: 700; transition: transform .2s, background .2s; white-space: nowrap; }
 .button:not(:disabled):hover { transform: translateY(-2px); }
-.button-dark { background: #161616; color: white; border: 1px solid #161616; }
-.button-dark:hover { background: #363636; }
-.button-outline { background: white; color: #161616; border: 1px solid #ddd; }
-.button-outline:hover { background: #f7f7f5; }
-.eyebrow { display: inline-flex; align-items: center; gap: .6rem; border: 1px solid #d9d9d5; padding: .5rem .75rem; border-radius: 50px; font-size: .625rem; font-weight: 800; letter-spacing: .17em; }
-.section-title { font-family: Manrope, sans-serif; font-size: clamp(2.5rem, 5vw, 4.5rem); line-height: 1.12; letter-spacing: -.065em; font-weight: 800; }
+.button-dark { background: rgb(var(--brand-rgb)); color: var(--on-brand); border: 1px solid rgb(var(--brand-rgb)); }
+.button-dark:hover { background: var(--brand-hover); }
+.button-outline { background: var(--surface); color: var(--text-primary); border: 1px solid rgb(var(--line-rgb)); }
+.button-outline:hover { background: var(--surface-alt); }
+.eyebrow { display: inline-flex; align-items: center; gap: .6rem; border: 1px solid rgb(var(--line-rgb)); background: var(--surface-alt); color: var(--earth); padding: .5rem .75rem; border-radius: 50px; font-size: .75rem; font-weight: 800; letter-spacing: .13em; }
+.section-title { font-family: Manrope, sans-serif; font-size: clamp(2.25rem, 5vw, 4.5rem); line-height: 1.12; letter-spacing: -.065em; font-weight: 800; }
 .page-title { margin-top: 1.1rem; font-family: Manrope, sans-serif; font-size: clamp(2rem, 4vw, 3rem); line-height: 1.12; font-weight: 800; letter-spacing: -.055em; }
-.hero-visual { position: relative; min-height: 530px; overflow: hidden; border-radius: 22px; background: #171717; color: white; isolation: isolate; }
-.hero-grid { position: absolute; inset: 0; opacity: .28; background-image: linear-gradient(#fff2 1px, transparent 1px), linear-gradient(90deg, #fff2 1px, transparent 1px); background-size: 46px 46px; transform: rotate(-17deg) scale(1.5); }
-.orbit { position: absolute; left: 50%; top: 50%; width: 420px; height: 420px; border: 1px solid #fff5; border-radius: 50%; transform: translate(-50%, -50%) rotate(-25deg) scaleX(1.25); }
-.orbit-two { width: 690px; height: 690px; border-color: #fff3; }
-.hero-center { position: absolute; left: 50%; top: 50%; display: grid; place-items: center; width: 200px; height: 200px; background: #fff; color: #161616; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 0 1px #fff5, 0 0 70px #fff3; }
-.feature-card { min-height: 310px; border: 1px solid #e4e4e0; border-radius: 16px; padding: 28px; background: #f7f7f5; transition: background .2s; }
-.feature-card:hover { background: white; }
-.nav-item { display: flex; align-items: center; gap: .8rem; border-radius: 10px; padding: .85rem .8rem; font-size: .875rem; font-weight: 600; color: #686868; text-align: left; }
-.nav-item:hover { background: #f7f7f5; color: #161616; }
-.nav-active { background: #161616 !important; color: white !important; }
-.panel { border: 1px solid #e4e4e0; border-radius: 16px; padding: 24px; background: white; }
-.stat { display: flex; flex-direction: column; align-items: flex-start; border: 1px solid #e4e4e0; border-radius: 16px; background: white; padding: 24px; }
+.hero-visual { position: relative; min-height: 530px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--earth) 25%, transparent); border-radius: 26px; background: linear-gradient(145deg, var(--field-deep), var(--field-middle) 58%, var(--field-light)); color: var(--on-brand); isolation: isolate; }
+.hero-visual::before { position: absolute; inset: 0; z-index: -1; content: ""; background: repeating-linear-gradient(168deg, transparent 0 34px, color-mix(in srgb, var(--earth) 22%, transparent) 36px 38px); opacity: .7; }
+.hero-grid { position: absolute; inset: 0; opacity: .7; background-image: linear-gradient(var(--hero-grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--hero-grid-line) 1px, transparent 1px); background-size: 46px 46px; transform: rotate(-17deg) scale(1.5); }
+.orbit { position: absolute; left: 50%; top: 50%; width: 420px; height: 420px; border: 1px solid var(--hero-orbit); border-radius: 50%; transform: translate(-50%, -50%) rotate(-25deg) scaleX(1.25); }
+.orbit-two { width: 690px; height: 690px; border-color: var(--hero-orbit-soft); }
+.hero-center { position: absolute; left: 50%; top: 50%; display: grid; place-items: center; width: 200px; height: 200px; background: var(--surface); color: var(--text-primary); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 0 1px var(--hero-orbit), 0 0 70px var(--hero-shadow); }
+.feature-card { min-height: 310px; border: 1px solid rgb(var(--line-rgb)); border-radius: 20px; padding: 28px; background: var(--surface-alt); box-shadow: 0 5px 22px rgb(var(--shadow-color) / .05); transition: background .2s; }
+.feature-card:hover { background: var(--surface); }
+.nav-item { display: flex; align-items: center; gap: .8rem; min-height: 46px; border-radius: 12px; padding: .7rem .8rem; font-size: 1rem; font-weight: 600; color: rgb(var(--muted-rgb)); text-align: left; }
+.nav-item:hover { background: var(--leaf-soft); color: var(--text-primary); }
+.nav-active { background: rgb(var(--brand-rgb)) !important; color: var(--on-brand) !important; }
+.panel { border: 1px solid rgb(var(--line-rgb)); border-radius: 20px; padding: 24px; background: var(--surface); box-shadow: 0 8px 26px rgb(var(--shadow-color) / .045); }
+.stat { display: flex; flex-direction: column; align-items: flex-start; border: 1px solid rgb(var(--line-rgb)); border-radius: 18px; background: var(--surface); padding: 24px; }
 .stat strong { margin-top: 5px; font-family: Manrope, sans-serif; font-size: 1.5rem; letter-spacing: -.04em; }
-.action-row { display: flex; align-items: center; gap: 12px; border: 1px solid #e4e4e0; border-radius: 10px; padding: 16px; font-size: .9rem; font-weight: 700; transition: background .2s; }
-.action-row:hover { background: #f7f7f5; }
-.field { display: flex; flex-direction: column; gap: 8px; font-size: .81rem; font-weight: 700; }
-.field input, .field select, .field textarea, .input, .select { width: 100%; min-height: 42px; border: 1px solid #dadad5; border-radius: 9px; padding: 10px 12px; outline: none; background: white; font-size: .875rem; font-weight: 400; color: #161616; }
-.field input:focus, .field select:focus, .field textarea:focus, .input:focus, .select:focus { border-color: #161616; box-shadow: 0 0 0 2px #16161618; }
-.field small { font-size: .75rem; color: #a52a2a; }
-.notice { border: 1px solid #e4e4e0; border-radius: 9px; background: #f7f7f5; padding: 12px 14px; font-size: .84rem; line-height: 1.5; }
+.action-row { display: flex; align-items: center; gap: 12px; border: 1px solid rgb(var(--line-rgb)); border-radius: 12px; background: var(--surface); padding: 16px; font-size: 1rem; font-weight: 700; transition: background .2s; }
+.action-row:hover { background: var(--leaf-soft); }
+.field { display: flex; flex-direction: column; gap: 8px; font-size: 1rem; font-weight: 700; }
+.field input, .field select, .field textarea, .input, .select { width: 100%; min-height: 46px; border: 1px solid rgb(var(--line-rgb)); border-radius: 11px; padding: 10px 12px; outline: none; background: var(--surface-raised); font-size: 16px; font-weight: 400; color: var(--text-primary); }
+.field input:focus, .field select:focus, .field textarea:focus, .input:focus, .select:focus { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 24%, transparent); }
+.field small { font-size: .875rem; color: var(--warning); }
+.notice { border: 1px solid color-mix(in srgb, var(--earth) 50%, rgb(var(--line-rgb))); border-radius: 12px; background: var(--earth-soft); color: var(--text-primary); padding: 14px 16px; font-size: 1rem; line-height: 1.5; }
+.icon-button { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; border-radius: 10px; }
 .leaflet-container { z-index: 0; font-family: 'DM Sans', sans-serif; }
+.leaflet-bar a, .leaflet-control-layers, .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface) !important; color: var(--text-primary) !important; }
 @media (max-width: 767px) { .hero-visual { min-height: 380px; } .hero-center { width: 145px; height: 145px; } .panel { padding: 20px; } }
+
+@media print {
+  @page { size: A4; margin: 14mm; }
+  body { background: white !important; color: black !important; }
+  body * { visibility: hidden !important; }
+  #climate-report, #climate-report * { visibility: visible !important; }
+  #climate-report {
+    position: absolute;
+    inset: 0 auto auto 0;
+    display: block !important;
+    width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  #climate-report .no-print { display: none !important; }
+  #climate-report .bg-paper { background: white !important; }
+  #climate-report .text-muted { color: #333 !important; }
+  #climate-report .overflow-x-auto { overflow: visible !important; }
+  #climate-report .climate-report-table { min-width: 0 !important; font-size: 8pt !important; }
+  #climate-report thead { display: table-header-group; }
+  #climate-report tr { break-inside: avoid; }
+  #climate-report * { color: black !important; box-shadow: none !important; }
+  #climate-report .report-coverage-status { border: 1px solid #555 !important; background: white !important; }
+  #climate-report .climate-report-table th, #climate-report .climate-report-table td { border-color: #777 !important; }
+  #climate-report h2, #climate-report h3, #climate-report strong, #climate-report li, #climate-report td, #climate-report th { break-inside: avoid; }
+  .preference-controls, .climate-assistant, .no-print { display: none !important; }
+}
+html[data-theme="dark"] .bg-white, html[data-theme="dark"] .bg-white\/90, html[data-theme="dark"] .bg-white\/95 { background-color: var(--surface) !important; color: var(--text-primary); }
+html[data-theme="dark"] .text-ink { color: var(--text-primary) !important; }
+html[data-theme="dark"] .text-muted { color: rgb(var(--muted-rgb)) !important; }
+html[data-theme="dark"] .bg-paper { background-color: rgb(var(--paper-rgb)) !important; color: var(--text-primary); }
+html[data-theme="dark"] .border-line, html[data-theme="dark"] .border-line\/60 { border-color: rgb(var(--line-rgb)) !important; }
+html[data-theme="dark"] .assistant-message { background: var(--surface-alt); }
+html[data-theme="dark"] .recharts-default-tooltip { background: var(--surface) !important; border-color: rgb(var(--line-rgb)) !important; color: var(--text-primary) !important; }
+
+.preference-controls { position: fixed; z-index: 1300; bottom: 1rem; left: 1rem; width: min(360px, calc(100vw - 2rem)); }
+.preference-actions { display: flex; gap: .5rem; }
+.preference-button { display: inline-flex; min-height: 46px; align-items: center; justify-content: center; gap: .45rem; border: 1px solid rgb(var(--line-rgb)); border-radius: 12px; background: var(--surface); padding: .55rem .8rem; color: var(--text-primary); font-size: 16px; font-weight: 700; box-shadow: 0 4px 16px rgb(var(--shadow-color) / .16); }
+.preference-fallback { max-width: 300px; margin-top: .45rem; border-radius: 10px; background: var(--surface); padding: .5rem .7rem; color: var(--text-primary); font-size: .875rem; line-height: 1.35; box-shadow: 0 4px 16px rgb(var(--shadow-color) / .16); }
+.preferences-caption { margin: 0 0 .35rem; color: var(--earth); font-size: .8rem; font-weight: 800; }
+.climate-skeleton { height: 74px; border-radius: 12px; background: linear-gradient(90deg, var(--surface-alt) 25%, var(--leaf-soft) 50%, var(--surface-alt) 75%); background-size: 200% 100%; animation: climate-shimmer 1.4s ease-in-out infinite; }
+@keyframes climate-shimmer { to { background-position: -200% 0; } }
+.report-coverage-status { margin-top: 1.25rem; border: 1px solid var(--earth); border-radius: 12px; background: var(--warning-surface); color: var(--text-primary); padding: 1rem; line-height: 1.5; }
+.report-coverage-complete { border-color: var(--success); background: var(--success-surface); }
+.report-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin-top: 1.25rem; }
+.report-facts > div { min-width: 0; border: 1px solid rgb(var(--line-rgb)); border-radius: 12px; background: var(--surface-alt); padding: .85rem; }
+.report-facts span { display: block; color: rgb(var(--muted-rgb)); font-size: .875rem; }
+.report-facts strong { display: block; margin-top: .25rem; overflow-wrap: anywhere; font-size: 1rem; }
+.climate-report-table { border-collapse: collapse; table-layout: fixed; }
+.climate-report-table th, .climate-report-table td { border-bottom: 1px solid rgb(var(--line-rgb)); padding: .55rem .45rem; overflow-wrap: anywhere; vertical-align: top; font-size: .875rem; }
+.climate-report-table thead th { font-weight: 700; }
+.report-required-notices { margin-top: 1.25rem; border-top: 1px solid rgb(var(--line-rgb)); padding-top: .85rem; }
+.report-required-notices h3 { font-weight: 700; }
+.report-required-notices ul { margin: .5rem 0 0; padding-left: 1.25rem; }
+.report-required-notices li { margin-top: .35rem; line-height: 1.45; overflow-wrap: anywhere; }
+.report-variable-code { display: inline; font-size: .875em; color: rgb(var(--muted-rgb)); }
+.climate-assistant { position: fixed; z-index: 1190; right: 1rem; bottom: 5rem; width: min(380px, calc(100vw - 2rem)); }
+.assistant-notice { margin-bottom: .4rem; border-radius: 10px; background: var(--earth-soft); padding: .5rem .7rem; color: var(--text-primary); font-size: .875rem; line-height: 1.35; box-shadow: 0 2px 12px rgb(var(--shadow-color) / .12); }
+.assistant-toggle { min-height: 46px; margin-left: auto; }
+.assistant-panel { position: absolute; right: 0; bottom: 5.7rem; display: flex; width: 100%; max-height: min(70vh, 620px); flex-direction: column; transform: translateX(calc(100% + 1rem)); visibility: hidden; border: 1px solid rgb(var(--line-rgb)); border-radius: 18px; background: var(--surface); padding: 1rem; color: var(--text-primary); box-shadow: 0 12px 40px rgb(var(--shadow-color) / .2); transition: transform .2s ease, visibility .2s; }
+.assistant-panel-open { transform: translateX(0); visibility: visible; }
+.assistant-messages { min-height: 96px; flex: 1; overflow-y: auto; padding: .85rem 0; }
+.assistant-message { margin-top: .6rem; border-radius: 10px; background: var(--surface-alt); padding: .75rem; overflow-wrap: anywhere; }
+.assistant-form { display: flex; gap: .5rem; border-top: 1px solid rgb(var(--line-rgb)); padding-top: .75rem; }
+.assistant-form input { min-width: 0; min-height: 46px; flex: 1; border: 1px solid rgb(var(--line-rgb)); border-radius: 10px; background: var(--surface-raised); color: var(--text-primary); padding: .65rem; font-size: 16px; }
+.visual-summary-year { border: 1px solid rgb(var(--line-rgb)); border-radius: 16px; background: var(--surface-alt); padding: .8rem 1rem; }
+.visual-summary-month { border: 1px solid rgb(var(--line-rgb)); border-radius: 14px; background: var(--surface); padding: .9rem; }
+.visual-metric { display: flex; align-items: center; gap: .55rem; min-width: 0; border-radius: 11px; background: var(--leaf-soft); padding: .65rem .75rem; color: var(--text-primary); }
+.visual-metric-icon { display: inline-flex; flex: 0 0 auto; color: var(--leaf); }
+.visual-unavailable { margin-top: .6rem; border-radius: 10px; background: var(--earth-soft); color: var(--text-primary); padding: .55rem .7rem; overflow-wrap: anywhere; }
+.lunar-calendar { border-color: rgb(var(--line-rgb)); background: var(--sky-soft); }
+.lunar-month { border: 1px solid rgb(var(--line-rgb)); border-radius: 12px; background: var(--surface); padding: .65rem; }
+.lunar-phase { border-radius: 12px; background: var(--surface); padding: .65rem; }
+.phase-symbol { color: var(--earth); font-size: 1.4rem; line-height: 1; }
+.climate-advanced-toggle { min-height: 46px; }
+.advanced-section { border: 1px solid rgb(var(--line-rgb)); border-radius: 18px; background: var(--surface); padding: 1.1rem; }
+.advanced-section + .advanced-section { margin-top: .8rem; }
+.source-coverage-note { margin-top: .85rem; border-top: 1px solid rgb(var(--line-rgb)); padding-top: .7rem; color: rgb(var(--muted-rgb)); font-size: .875rem; }
+.advanced-table { width: 100%; min-width: 620px; border-collapse: collapse; text-align: left; }
+.advanced-table th, .advanced-table td { border-bottom: 1px solid rgb(var(--line-rgb)); padding: .6rem .5rem; vertical-align: top; overflow-wrap: anywhere; }
+.advanced-table th { color: rgb(var(--muted-rgb)); font-weight: 700; }
+.data-label { color: var(--earth); font-size: .875rem; font-weight: 700; }
+.mobile-data-row { border: 1px solid rgb(var(--line-rgb)); border-radius: 12px; padding: .7rem; }
+.settings-panel { position: fixed; z-index: 1300; bottom: 1rem; left: 1rem; width: min(360px, calc(100vw - 2rem)); border: 1px solid rgb(var(--line-rgb)); border-radius: 16px; background: var(--surface); padding: .75rem; color: var(--text-primary); box-shadow: 0 10px 30px rgb(var(--shadow-color) / .2); }
+
+.brand-preferences { display: flex; min-width: 0; align-items: center; gap: .8rem; }
+.header-preferences { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; }
+.header-preferences .preferences-caption { margin: 0; color: var(--earth); font-size: .7rem; font-weight: 800; line-height: 1.1; }
+.header-preferences .preference-actions { gap: .35rem; }
+.header-preferences .preference-button { min-height: 44px; box-shadow: none; }
+.header-preferences .preference-fallback { position: absolute; top: calc(100% + .35rem); left: 0; z-index: 1300; display: block; width: min(300px, calc(100vw - 1rem)); margin: 0; border: 1px solid rgb(var(--line-rgb)); border-radius: 10px; background: var(--surface); padding: .55rem .7rem; color: var(--text-primary); font-size: .875rem; line-height: 1.35; box-shadow: 0 4px 16px rgb(var(--shadow-color) / .16); }
+
+.profile-banner { display: flex; align-items: center; gap: 1.25rem; overflow: hidden; background: linear-gradient(125deg, var(--leaf-soft), var(--earth-soft) 62%, var(--surface)); }
+.profile-avatar { display: grid; width: 84px; height: 84px; flex: 0 0 auto; place-items: center; border: 4px solid rgb(var(--brand-rgb)); border-radius: 50%; background: var(--surface); color: var(--text-primary); font-family: Manrope, sans-serif; font-size: 2rem; font-weight: 800; box-shadow: 0 0 0 5px color-mix(in srgb, rgb(var(--brand-rgb)) 13%, transparent); }
+.profile-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; }
+.profile-fact { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: .35rem; border: 1px solid rgb(var(--line-rgb)); border-radius: 16px; background: var(--surface); padding: 1rem; }
+.profile-fact > svg { color: var(--leaf); }
+.profile-fact > span { color: rgb(var(--muted-rgb)); font-size: .875rem; }
+.profile-fact strong { max-width: 100%; overflow-wrap: anywhere; }
+.profile-retry { display: inline-flex; min-height: 44px; align-items: center; gap: .4rem; margin-top: .25rem; border-radius: 9px; color: var(--text-primary); font-weight: 700; text-decoration: underline; }
+.profile-empty { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.profile-empty-icon { display: grid; width: 54px; height: 54px; place-items: center; border-radius: 16px; background: var(--leaf-soft); color: var(--leaf); }
+
+.lunar-dialog { width: min(760px, calc(100vw - 1rem)); max-width: none; max-height: calc(100dvh - 1rem); margin: auto; overflow: hidden; border: 1px solid rgb(var(--line-rgb)); border-radius: 20px; background: var(--surface); color: var(--text-primary); padding: 0; box-shadow: 0 18px 60px rgb(0 0 0 / .32); }
+.lunar-dialog::backdrop { background: rgb(8 15 10 / .58); }
+.lunar-dialog-card { max-height: calc(100dvh - 1rem); overflow-y: auto; background: var(--surface); padding: clamp(1rem, 4vw, 1.5rem); }
+.lunar-month-banner { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px auto; align-items: center; justify-items: center; gap: .4rem; border-radius: 12px; background: var(--lunar-banner); color: var(--lunar-banner-text); padding: .55rem 3.25rem .55rem .55rem; }
+.lunar-month-banner h2 { min-width: 0; font-family: Manrope, sans-serif; font-size: clamp(1rem, 3.2vw, 1.45rem); font-weight: 800; line-height: 1.2; text-align: center; }
+.lunar-nav-button, .lunar-close-button { display: inline-flex; width: 44px; min-width: 44px; height: 44px; align-items: center; justify-content: center; border: 1px solid rgb(255 255 255 / .52); border-radius: 10px; background: transparent; color: var(--lunar-banner-text); }
+.lunar-nav-button:disabled, .lunar-today-button:disabled { opacity: .45; }
+.lunar-close-button { position: absolute; top: .55rem; right: .55rem; }
+.lunar-month-banner button:focus-visible { outline-color: var(--lunar-banner-text); }
+.lunar-today-button { min-height: 44px; border: 1px solid rgb(255 255 255 / .68); border-radius: 10px; background: rgb(255 255 255 / .08); padding: .45rem .7rem; color: var(--lunar-banner-text); font-weight: 800; }
+.lunar-grid { display: grid; width: 100%; margin-top: .65rem; overflow: hidden; border: 1px solid rgb(var(--line-rgb)); border-radius: 10px; }
+.lunar-grid-row { display: grid; grid-template-columns: 30px repeat(7, minmax(0, 1fr)); gap: 0; }
+.lunar-grid-row + .lunar-grid-row { border-top: 1px solid rgb(var(--line-rgb)); }
+.lunar-grid-head { background: var(--surface-alt); color: var(--text-primary); font-size: .75rem; font-weight: 800; text-align: center; }
+.lunar-grid-head > span { display: grid; min-width: 0; min-height: 34px; place-items: center; }
+.lunar-grid-head > span:first-child { font-size: .62rem; }
+.lunar-grid-head > span + span, .lunar-week-number, .lunar-day-cell { border-left: 1px solid rgb(var(--line-rgb)); }
+.lunar-week-number { display: flex; min-width: 0; align-items: flex-start; justify-content: center; padding-top: .35rem; color: rgb(var(--muted-rgb)); font-size: .68rem; font-weight: 800; }
+.lunar-day-cell, .lunar-outside-day { display: flex; min-width: 0; min-height: 92px; flex-direction: column; align-items: center; justify-content: flex-start; gap: 1px; border-radius: 0; background: var(--surface); padding: 3px 1px 2px; }
+.lunar-day-cell { position: relative; border-top: 0; border-right: 0; border-bottom: 0; color: var(--text-primary); }
+.lunar-day-cell:hover { background: var(--surface-alt); }
+.lunar-day-selected { z-index: 1; outline: 2px solid var(--lunar-outline); outline-offset: -2px; background: var(--sky-soft); }
+.lunar-day-today:not(.lunar-day-selected) { outline: 2px dashed var(--lunar-outline); outline-offset: -4px; }
+.lunar-date-number { font-size: .78rem; font-weight: 800; line-height: 1.1; }
+.lunar-moon-image { display: block; width: 44px; height: 44px; flex: 0 0 auto; }
+.lunar-moon-shadow { fill: var(--moon-shadow); }
+.lunar-moon-lit { fill: var(--moon-lit); }
+.lunar-date-caption { max-width: 100%; color: rgb(var(--muted-rgb)); font-size: .62rem; font-weight: 700; line-height: 1.05; overflow-wrap: anywhere; text-align: center; }
+.lunar-day-selected .lunar-date-caption { color: var(--text-primary); }
+.lunar-source-note { margin-top: .75rem; border-top: 1px solid rgb(var(--line-rgb)); padding-top: .65rem; font-size: .8rem; line-height: 1.4; color: rgb(var(--muted-rgb)); }
+.lunar-month-controls { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px auto; align-items: center; justify-items: center; gap: .5rem; margin-top: 1.25rem; }
+.lunar-month-controls h3 { text-align: center; }
+.lunar-today { min-height: 44px; }
+.lunar-month-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; margin-top: .85rem; }
+.lunar-month-choice { min-width: 0; min-height: 44px; border: 1px solid rgb(var(--line-rgb)); border-radius: 10px; background: var(--surface-alt); padding: .4rem .25rem; color: var(--text-primary); font-size: .875rem; font-weight: 700; }
+.lunar-month-choice-active { border-color: rgb(var(--brand-rgb)); background: rgb(var(--brand-rgb)); color: var(--on-brand); }
+.lunar-weekdays, .lunar-day-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .3rem; }
+.lunar-weekdays { margin-top: 1rem; color: rgb(var(--muted-rgb)); font-size: .75rem; font-weight: 800; text-align: center; }
+.lunar-day-grid { margin-top: .35rem; }
+.lunar-day, .lunar-day-empty { display: flex; min-width: 0; min-height: 44px; flex-direction: column; align-items: center; justify-content: center; border-radius: 9px; }
+.lunar-day { border: 1px solid transparent; background: var(--surface-alt); font-size: .875rem; line-height: 1.1; }
+.lunar-day-phase { border-color: color-mix(in srgb, var(--earth) 55%, rgb(var(--line-rgb))); }
+.lunar-day-symbol { color: var(--earth); font-size: .72rem; line-height: 1; }
+.lunar-event-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.lunar-event-list .lunar-phase { min-width: 0; }
+
+@media (min-width: 600px) {
+  .lunar-month-picker { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+
+@media (max-width: 600px) {
+  .report-facts { grid-template-columns: 1fr; }
+  #climate-report { padding: 16px; }
+  #climate-report .overflow-x-auto { overflow: visible; }
+  #climate-report .climate-report-table { display: block; min-width: 0 !important; font-size: .875rem; }
+  #climate-report .climate-report-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  #climate-report .climate-report-table tbody { display: grid; gap: .6rem; }
+  #climate-report .climate-report-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem .65rem; border: 1px solid rgb(var(--line-rgb)); border-radius: 10px; padding: .5rem; }
+  #climate-report .climate-report-table th, #climate-report .climate-report-table td { min-width: 0; border: 0; padding: .25rem; }
+  #climate-report .climate-report-table th[scope="row"] { grid-column: 1 / -1; }
+  #climate-report .climate-report-table td::before { display: block; content: attr(data-label); margin-bottom: .15rem; color: rgb(var(--muted-rgb)); font-size: .875rem; font-weight: 700; }
+  .preference-controls, .settings-panel { left: .5rem; bottom: .5rem; width: min(240px, calc(100vw - 1rem)); }
+  .header-preferences .preferences-caption { display: none; }
+  .header-preferences .preference-button { width: 44px; min-width: 44px; justify-content: center; padding: 0; }
+  .header-preferences .preference-button-label { display: none; }
+  .brand-preferences { gap: .35rem; }
+  .logo { gap: .45rem; font-size: 1rem; }
+  .logo-mark { width: 34px; height: 34px; border-radius: 11px; }
+  .lunar-dialog { width: 100vw; border-width: 0; border-radius: 14px; }
+  .lunar-dialog-card { padding: 6px; }
+  .lunar-month-banner { grid-template-columns: 44px minmax(0, 1fr) 44px; gap: .15rem; padding: .4rem; padding-right: 2.8rem; }
+  .lunar-month-banner h2 { font-size: clamp(.95rem, 4.2vw, 1.2rem); }
+  .lunar-close-button { top: .4rem; right: .4rem; }
+  .lunar-today-button { grid-column: 1 / -1; }
+  .lunar-grid-row { grid-template-columns: 36px repeat(7, minmax(0, 1fr)); }
+  .lunar-grid-head > span:first-child { font-size: .53rem; }
+  .lunar-day-cell, .lunar-outside-day { min-height: 92px; }
+  .lunar-date-number { font-size: .68rem; }
+  .lunar-moon-image { width: 30px; height: 30px; }
+  .lunar-date-caption { font-size: .55rem; line-height: 1; }
+  .lunar-event-list { grid-template-columns: 1fr; }
+  .profile-facts { grid-template-columns: 1fr; }
+  .profile-banner { align-items: flex-start; flex-direction: column; }
+  .climate-assistant { right: .5rem; bottom: 5rem; width: min(340px, calc(100vw - 1rem)); }
+}
+@media (max-width: 380px) {
+  .preference-controls, .settings-panel { width: min(220px, calc(100vw - 1rem)); }
+  .preference-actions { flex-wrap: wrap; }
+  .logo > span:last-child > span { display: none; }
+  .landing-start { width: 44px; padding: 0; }
+  .landing-start span { display: none; }
+}
+@media (max-width: 767px) {
+  .field input, .field select, .field textarea { font-size: 16px; }
+  .page-title { font-size: clamp(1.9rem, 9vw, 2.5rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
+@media print {
+  #climate-report .climate-report-table { display: table !important; }
+  #climate-report .climate-report-table tbody { display: table-row-group !important; }
+  #climate-report .climate-report-table tr { display: table-row !important; border: 0 !important; padding: 0 !important; }
+  #climate-report .climate-report-table th, #climate-report .climate-report-table td { display: table-cell !important; padding: .4rem .3rem !important; }
+  #climate-report .climate-report-table td::before { display: none !important; content: none !important; }
+}
