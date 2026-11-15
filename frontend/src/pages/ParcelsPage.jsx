@@ -9,6 +9,7 @@ const emptyProfile = { soil_texture: '', irrigation: '', current_crop: '', notes
 export function ParcelsPage() {
   const { parcels, loading, reload } = useParcels()
   const [selected, setSelected] = useState('')
+  const [suggestions, setSuggestions] = useState([])
   const [geometry, setGeometry] = useState(null)
   const [point, setPoint] = useState(null)
   const [focus, setFocus] = useState(null)
@@ -69,7 +70,7 @@ export function ParcelsPage() {
     if (!navigator.geolocation) { setNotice('Este navegador no admite geolocalización. Usa la búsqueda.'); return }
     navigator.geolocation.getCurrentPosition(async pos => {
       const center = [pos.coords.latitude, pos.coords.longitude]
-      setPoint(center); setSearchMarker(center); setFocus({ center, zoom: 15 })
+      setPoint(center); setSearchMarker(center); setFocus({ center, zoom: 16 })
       try {
         const { data } = await api.get('geocode/reverse/', { params: { lat: center[0], lon: center[1] } })
         if (data.country_code && countryNames[data.country_code]) setCountry(data.country_code)
@@ -114,50 +115,316 @@ export function ParcelsPage() {
     const link = document.createElement('a'); link.href = url; link.download = 'parcela.geojson'; link.click(); URL.revokeObjectURL(url)
   }
 
-  return <div>
-    <Heading eyebrow="01 / TU TERRENO" title="Mis parcelas" description="Enfoca el mapa en un país o localidad, dibuja tu terreno y guarda su información. La superficie se calcula en el servidor." />
-    <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="min-w-0">
-        <div className="mb-3 flex flex-wrap gap-2">
-          <input className="input min-w-0 flex-1" aria-label="Buscar localidad o sector" placeholder="Buscar sector, ciudad o país…" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && find()} />
-          <button className="button button-outline" title="Busca un país, ciudad o sector; el mapa se centrará y colocará una chincheta." onClick={() => find()}><Search size={17} /> Buscar</button>
-          <button className="button button-outline" title="Solicita tu ubicación para centrar el mapa; requiere permiso del navegador." onClick={locate}><MapPin size={17} /> Ubicarme</button>
-        </div>
-        <div className="overflow-hidden rounded-2xl border border-line bg-white">
-          <div className="h-[490px]"><ParcelMap geometry={geometry} onChange={onGeometry} point={point} onPoint={onPoint} focus={focus} searchMarker={searchMarker} satellite={satellite} date={date} /></div>
-          <div className="flex flex-wrap items-center gap-3 border-t border-line p-4 text-xs">
-            <label className="flex items-center gap-2" title="Muestra u oculta la capa visual MODIS Terra de NASA; no aporta mediciones del terreno."><input type="checkbox" checked={satellite} onChange={e => setSatellite(e.target.checked)} /> NASA GIBS (MODIS Terra)</label>
-            {satellite && <label>Fecha <input className="input ml-2 !w-auto !py-1" type="date" value={date} onChange={e => setDate(e.target.value)} /></label>}
-            <span className="ml-auto text-muted">Imágenes satelitales, no mediciones de parcela.</span>
+  return (
+    <div>
+      <Heading
+        // eyebrow="01 / TU TERRENO"
+        // title="Mis parcelas"
+        // description="Enfoca el mapa en un país o localidad, dibuja tu terreno y guarda su información. La superficie se calcula en el servidor."
+      /> 
+      <div className=" grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0">
+          <div className="mb-3 flex flex-wrap gap-2">
+            {/* <input
+              className="input min-w-0 flex-1"
+              aria-label="Buscar localidad o sector"
+              placeholder="Buscar sector, ciudad o país…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && find()}
+            />
+            <button
+              className="button button-outline"
+              title="Busca un país, ciudad o sector; el mapa se centrará y colocará una chincheta."
+              onClick={() => find()}
+            >
+              <Search size={17} /> Buscar
+            </button> */}
+            <div className="relative flex-1 min-w-0">
+  <input
+    className="input w-full"
+    aria-label="Buscar localidad o sector"
+    placeholder="Buscar sector, ciudad o país…"
+    value={search}
+    onChange={async (e) => {
+      const value = e.target.value;
+      setSearch(value);
+      
+      if (value.trim().length < 3) {
+        setSuggestions([]);
+        return;
+      }
+      
+      try {
+        // Llama a tu endpoint actual de geocodificación
+        const { data: results } = await api.get('geocode/', { params: { q: value } });
+        setSuggestions(results.slice(0, 5)); // Limitamos a 5 sugerencias
+      } catch {
+        setSuggestions([]);
+      }
+    }}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        find();
+        setSuggestions([]);
+      }
+    }}
+  />
+
+  {/* Lista flotante de autocompletado */}
+  {suggestions.length > 0 && (
+    <ul className="absolute z-50 w-full mt-1 bg-white border border-line rounded-xl shadow-lg max-h-60 overflow-auto">
+      {suggestions.map((item, index) => (
+        <li
+          key={index}
+          onClick={() => {
+            setSearch(item.display_name || search);
+            focusResult(item);
+            setSuggestions([]);
+          }}
+          className="px-4 py-2 text-xs cursor-pointer hover:bg-gray-100 border-b border-line last:border-none"
+        >
+          {item.display_name}
+        </li>
+      ))}
+    </ul>
+  )}
+</div> <button
+              className="button button-outline"
+              title="Busca un país, ciudad o sector; el mapa se centrará y colocará una chincheta."
+              onClick={() => find()}
+            >
+              <Search size={17} /> Buscar
+            </button>
+            <button
+              className="button button-outline"
+              title="Solicita tu ubicación para centrar el mapa; requiere permiso del navegador."
+              onClick={locate}
+            >
+              <MapPin size={17} /> Ubicarme
+            </button>
+          </div>
+
+
+          <div className="overflow-hidden rounded-2xl border border-line bg-white">
+            <div className="h-[490px]">
+              <ParcelMap
+                geometry={geometry}
+                onChange={onGeometry}
+                point={point}
+                onPoint={onPoint}
+                focus={focus}
+                searchMarker={searchMarker}
+                satellite={satellite}
+                date={date}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-3 border-t border-line p-4 text-xs">
+              <label
+                className="flex items-center gap-2"
+                title="Muestra u oculta la capa visual MODIS Terra de NASA; no aporta mediciones del terreno."
+              >
+                <input
+                  type="checkbox"
+                  checked={satellite}
+                  onChange={(e) => setSatellite(e.target.checked)}
+                />{" "}
+                NASA GIBS (MODIS Terra)
+              </label>
+              {satellite && (
+                <label>
+                  Fecha{" "}
+                  <input
+                    className="input ml-2 !w-auto !py-1"
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                  />
+                </label>
+              )}
+              <span className="ml-auto text-muted">
+                Imágenes satelitales, no mediciones de parcela.
+              </span>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+            <label
+              className="button button-outline cursor-pointer"
+              title="Abre un archivo .geojson o .json con un polígono para editarlo y guardarlo como parcela."
+            >
+              <Upload size={16} /> Importar GeoJSON
+              <input
+                className="hidden"
+                type="file"
+                accept=".json,.geojson,application/geo+json"
+                onChange={importFile}
+              />
+            </label>
+            <button
+              className="button button-outline"
+              title="Descarga el polígono actual como archivo parcela.geojson; no borra ni comparte datos."
+              disabled={!geometry}
+              onClick={exportFile}
+            >
+              <Download size={16} /> Exportar
+            </button>
+            <div className="w-full text-xs leading-relaxed text-muted">
+              <strong>Importar:</strong> abre un archivo GeoJSON (.geojson o
+              .json) que contenga un polígono; revisa país y guarda para
+              conservarlo. <strong>Exportar:</strong> descarga el polígono
+              actual como parcela.geojson para reutilizarlo en otra herramienta.
+            </div>
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-          <label className="button button-outline cursor-pointer" title="Abre un archivo .geojson o .json con un polígono para editarlo y guardarlo como parcela."><Upload size={16} /> Importar GeoJSON<input className="hidden" type="file" accept=".json,.geojson,application/geo+json" onChange={importFile} /></label>
-          <button className="button button-outline" title="Descarga el polígono actual como archivo parcela.geojson; no borra ni comparte datos." disabled={!geometry} onClick={exportFile}><Download size={16} /> Exportar</button>
-          <div className="w-full text-xs leading-relaxed text-muted"><strong>Importar:</strong> abre un archivo GeoJSON (.geojson o .json) que contenga un polígono; revisa país y guarda para conservarlo. <strong>Exportar:</strong> descarga el polígono actual como parcela.geojson para reutilizarlo en otra herramienta.</div>
+        <div className="panel h-fit">
+          <h2 className="text-xl font-bold">Datos de parcela</h2>
+          {/* <label className="field mt-5">
+            Parcela guardada
+            <ParcelSelect
+              parcels={parcels}
+              value={selected}
+              onChange={choose}
+            />
+          </label> */}
+          {loading && <p className="mt-2 text-xs text-muted">Cargando…</p>}
+          <form className="mt-5 space-y-4" onSubmit={save}>
+            <label className="field">
+              Nombre
+              <input
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Mi parcela"
+               
+              />
+            </label>
+            <label className="field">
+              País
+              <select
+                required
+                value={country}
+                onChange={(e) => chooseCountry(e.target.value)}
+              >
+                <option value="">Selecciona un país</option>
+                {countryOptions.map(([code, label]) => (
+                  <option key={code} value={code}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Sector o región
+              <input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Ej. Chimborazo"
+                disabled={!country}
+              />
+            </label>
+            {/* <p className="text-xs leading-relaxed text-muted">
+              El país se completa al buscar o utilizar tu ubicación, pero puedes
+              corregirlo. Tus coordenadas se usan internamente para NASA; no se
+              muestran aquí.
+            </p> */}
+            <details className="border-t border-line pt-4">
+              <summary className="cursor-pointer font-semibold">
+                Perfil agronómico (opcional)
+              </summary>
+              <div className="mt-4 space-y-3">
+                <label className="field">
+                  Cultivo actual
+                  <input
+                    value={profile.current_crop || ""}
+                    placeholder="ej. Maíz"
+                    onChange={(e) =>
+                      setProfile({ ...profile, current_crop: e.target.value })
+                    }
+                  />
+                </label>
+                <label className="field">
+                  Textura del suelo
+                  <select
+                    value={profile.soil_texture || ""}
+                    onChange={(e) =>
+                      setProfile({ ...profile, soil_texture: e.target.value })
+                    }
+                  >
+                    <option value="">No lo sé</option>
+                    {soilTextures.map((texture) => (
+                      <option key={texture} value={texture}>
+                        {texture}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <fieldset className="field">
+                  <legend>¿Tiene riego?</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      ["Sí", "Sí"],
+                      ["No", "No"],
+                      
+                    ].map(([value, label]) => (
+                      <label
+                        key={label}
+                        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${profile.irrigation === value ? "border-leaf bg-mint" : "border-line bg-white"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="irrigation"
+                          className="!min-h-0 !w-auto accent-leaf"
+                          value={value}
+                          checked={(profile.irrigation || "") === value}
+                          onChange={() =>
+                            setProfile({ ...profile, irrigation: value })
+                          }
+                        />{" "}
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <label className="field">
+                  Observaciones
+                  <input
+                    value={profile.notes || ""}
+                    placeholder="Condiciones conocidas del terreno"
+                    onChange={(e) =>
+                      setProfile({ ...profile, notes: e.target.value })
+                    }
+                  />
+                </label>
+              </div>
+            </details>
+            <button
+              className="button button-dark w-full"
+              title="Valida y guarda este polígono y perfil en tu cuenta."
+            >
+              <Save size={17} /> Guardar parcela
+            </button>
+            {selected && (
+              <button
+                type="button"
+                className="button button-outline w-full"
+                title="Elimina permanentemente la parcela seleccionada y su historial; solicitará confirmación."
+                onClick={remove}
+              >
+                <Trash2 size={16} /> Eliminar parcela
+              </button>
+            )}
+          </form>
+
+            {notice && (
+            <p role="status" className="  notice mt-4">
+              {notice}
+            </p>
+          )}
+         
         </div>
+        
       </div>
-      <div className="panel h-fit"><h2 className="text-xl font-bold">Datos de parcela</h2>
-        <label className="field mt-5">Parcela guardada<ParcelSelect parcels={parcels} value={selected} onChange={choose} /></label>
-        {loading && <p className="mt-2 text-xs text-muted">Cargando…</p>}
-        <form className="mt-5 space-y-4" onSubmit={save}>
-          <label className="field">Nombre<input required value={name} onChange={e => setName(e.target.value)} placeholder="Mi parcela" /></label>
-          <label className="field">País<select required value={country} onChange={e => chooseCountry(e.target.value)}><option value="">Selecciona un país</option>{countryOptions.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
-          <label className="field">Sector o región<input value={location} onChange={e => setLocation(e.target.value)} placeholder="Ej. Chimborazo" /></label>
-          <p className="text-xs leading-relaxed text-muted">El país se completa al buscar o utilizar tu ubicación, pero puedes corregirlo. Tus coordenadas se usan internamente para NASA; no se muestran aquí.</p>
-          <details className="border-t border-line pt-4"><summary className="cursor-pointer font-semibold">Perfil agronómico (opcional)</summary>
-            <div className="mt-4 space-y-3">
-              <label className="field">Cultivo actual<input value={profile.current_crop || ''} placeholder="No lo sé" onChange={e => setProfile({ ...profile, current_crop: e.target.value })} /></label>
-              <label className="field">Textura del suelo<select value={profile.soil_texture || ''} onChange={e => setProfile({ ...profile, soil_texture: e.target.value })}><option value="">No lo sé</option>{soilTextures.map(texture => <option key={texture} value={texture}>{texture}</option>)}</select></label>
-              <fieldset className="field"><legend>¿Tiene riego?</legend><div className="flex flex-wrap gap-2">{[['Sí', 'Sí'], ['No', 'No'], ['', 'No lo sé']].map(([value, label]) => <label key={label} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${profile.irrigation === value ? 'border-leaf bg-mint' : 'border-line bg-white'}`}><input type="radio" name="irrigation" className="!min-h-0 !w-auto accent-leaf" value={value} checked={(profile.irrigation || '') === value} onChange={() => setProfile({ ...profile, irrigation: value })} /> {label}</label>)}</div></fieldset>
-              <label className="field">Observaciones<input value={profile.notes || ''} placeholder="Condiciones conocidas del terreno" onChange={e => setProfile({ ...profile, notes: e.target.value })} /></label>
-            </div>
-          </details>
-          <button className="button button-dark w-full" title="Valida y guarda este polígono y perfil en tu cuenta."><Save size={17} /> Guardar parcela</button>
-          {selected && <button type="button" className="button button-outline w-full" title="Elimina permanentemente la parcela seleccionada y su historial; solicitará confirmación." onClick={remove}><Trash2 size={16} /> Eliminar parcela</button>}
-        </form>
-        {notice && <p role="status" className="notice mt-4">{notice}</p>}
-      </div>
+     
     </div>
-  </div>
+  );
 }

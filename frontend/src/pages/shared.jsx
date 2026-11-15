@@ -31,7 +31,15 @@ export function useParcels() {
 }
 
 export function Heading({ eyebrow, title, description }) {
-  return <div><div className="eyebrow">{eyebrow}</div><h1 className="page-title">{title}</h1>{description && <p className="mt-3 max-w-2xl text-muted">{description}</p>}</div>
+  return (
+    <div>
+      <div className={`${eyebrow ? 'eyebrow' : 'hidden'}`}>{eyebrow }</div>
+      <h1 className="page-title">{title}</h1>
+      {description && (
+        <p className="mt-3 max-w-2xl text-muted">{description}</p>
+      )}
+    </div>
+  );
 }
 export function Empty({ icon: Icon, title, text, to, action }) {
   return <div className="panel flex flex-col items-center py-14 text-center"><span className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-mint"><Icon size={28} /></span><h3 className="font-display text-xl font-bold">{title}</h3><p className="mt-2 max-w-md text-sm text-muted">{text}</p>{to && <Link to={to} className="button button-dark mt-6">{action} <ArrowRight size={16} /></Link>}</div>

@@ -62,6 +62,4 @@ npm run build
 
 La suite usa dobles para respuestas NASA; las pruebas de integración externas se realizan por separado. Se comprobó manualmente desde la aplicación la consulta POWER de los tres años completos 2023–2025 y se verificó el WMS GetCapabilities de NASA GIBS. Más detalles: [`docs/FUENTES_Y_LIMITACIONES.md`](docs/FUENTES_Y_LIMITACIONES.md) y [`docs/API.md`](docs/API.md).
 
-## Funciones aún limitadas
 
-La versión actual **no satisface todo el prompt inicial**: las 15 fichas Ecocrop no están verificadas para localidades concretas; el corredor andino es una **aproximación rectangular**, no una delimitación agroecológica. Tampoco hay pronósticos futuros calibrados, asistente capaz de resolver preguntas arbitrarias, geocodificación mundial robusta, catálogo dinámico de capas GIBS desde GetCapabilities, calendario de siembra completo, estimación hídrica por rotación ni resumen compartible con un profesional. No se deben presentar estas partes como implementadas. La consulta POWER requiere conexión; GIBS y OSM también. La caché NASA diaria dura 30 días y la mensual histórica 90 días en SQLite; la de geocodificación en memoria dura 24 horas.

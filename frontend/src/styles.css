@@ -26,7 +26,7 @@ em { font-family: Georgia, serif; font-weight: 400; }
 .orbit { position: absolute; left: 50%; top: 50%; width: 420px; height: 420px; border: 1px solid #fff5; border-radius: 50%; transform: translate(-50%, -50%) rotate(-25deg) scaleX(1.25); }
 .orbit-two { width: 690px; height: 690px; border-color: #fff3; }
 .hero-center { position: absolute; left: 50%; top: 50%; display: grid; place-items: center; width: 200px; height: 200px; background: #fff; color: #2d6a4f; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 0 1px #fff5, 0 0 70px #fff3; }
-.feature-card { min-height: 310px; border: 1px solid #dce9de; border-radius: 16px; padding: 28px; background: #f5faf5; transition: background .2s; }
+.feature-card { min-height: 250px; border: 1px solid #dce9de; border-radius: 16px; padding: 28px; background: #f5faf5; transition: background .2s; }
 .feature-card:hover { background: white; }
 .nav-item { display: flex; align-items: center; gap: .8rem; border-radius: 10px; padding: .85rem .8rem; font-size: .875rem; font-weight: 600; color: #686868; text-align: left; }
 .nav-item:hover { background: #eef8ef; color: #183f30; }
