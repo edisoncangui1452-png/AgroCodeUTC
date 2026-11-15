@@ -1,4 +1,4 @@
-# AgroFísica
+# AgroCode
 
 Prototipo web para consultar el clima histórico de una parcela con NASA POWER y conservar decisiones agrícolas. Interfaz en español, visual verde claro/blanco. **No está desplegado y no se debe usar como asesoría agronómica profesional.**
 
@@ -74,6 +74,10 @@ La visualización ofrece **Estado observado** (solo una etapa confirmada en el p
 En **Cultivos y rotaciones**, cada ficha aparece una sola vez, en la duración principal más próxima al centro de su rango FAO; puede expandir la tarjeta para ver otras duraciones compatibles. Arveja, por ejemplo, conserva 60–140 días y puede coincidir con ~2 y ~3 meses sin ser dos registros distintos. Si la lluvia anual solo coincide en parte con la ficha FAO, se advierte **compatibilidad parcial**; nunca se infiere agua disponible del ciclo. La comparación transparente de rotaciones considera el último cultivo registrado, familias sucesivas y datos existentes de suelo, riego y clima histórico guardado para ese punto. Sin mes de siembra, análisis de suelo y agua medidos no atribuye aptitud completa ni pronostica rendimiento.
 
 La búsqueda geográfica envía el texto consultado a Nominatim; la consulta climática envía a NASA el punto representativo del polígono. No se publican parcelas por la API. La recuperación de contraseña imprime el enlace en la consola del backend en desarrollo; para envío real configura SMTP en `.env`.
+
+### Idiomas de la interfaz
+
+El selector 🇪🇨 ES / 🇺🇸 EN está en la cabecera del sitio público, acceso y área privada. Español es el idioma inicial; el cambio se aplica en React sin recargar ni restablecer formularios y se recuerda en `localStorage` (`agrocode-language`, con lectura de la clave anterior para conservar preferencias). `frontend/src/i18n.jsx` reúne el catálogo inglés y traduce etiquetas, mensajes conocidos del servidor y fechas mediante `Intl`; la API conserva códigos y datos originales. Los textos escritos por usuarios, nombres propios y datos científicos no se modifican. La revisión opcional de Ollama acepta `language: "es"|"en"` y responde en ese idioma conservando sus límites agronómicos. Al incorporar nuevos textos del servidor hay que añadir su traducción; errores no catalogados y contenido libre de terceros se muestran tal como llegaron.
 
 ## Comprobaciones
 

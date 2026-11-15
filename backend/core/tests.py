@@ -130,6 +130,11 @@ class ParcelTests(TestCase):
         self.assertEqual(payload["strategy"], "Estrategia B")
         self.assertEqual(payload["parcel_context"]["soil_texture"], "Franco")
         self.assertEqual(payload["parcel_context"]["irrigation"], "Sí")
+        self.assertEqual(review.call_args.kwargs["language"], "es")
+        self.assertEqual(self.client.post(url, {"crops": ["Papa"], "language": "fr"}, format="json").status_code, 400)
+        english = self.client.post(url, {"crops": ["Papa"], "language": "en"}, format="json")
+        self.assertEqual(english.status_code, 200)
+        self.assertEqual(review.call_args.kwargs["language"], "en")
         self.assertEqual(payload["plants"][0]["family"], Crop.objects.get(name="Papa").family)
 
     @patch("core.views.review_strategy", side_effect=OllamaUnavailable("Ollama no responde."))
@@ -425,6 +430,23 @@ class OllamaTests(TestCase):
             final_review({"message": {"content": answer}, "done_reason": "length"})
         with self.assertRaisesRegex(OllamaUnavailable, "razonamiento"):
             final_review({"message": {"content": "<think>incomplete"}})
+
+    @patch("core.ollama.requests.Session")
+    def test_english_review_uses_english_safety_prompt(self, session_class):
+        session = session_class.return_value.__enter__.return_value
+        session.request.side_effect = [
+            type("Reply", (), {"is_redirect": False, "raise_for_status": lambda self: None,
+                               "json": lambda self: {"models": [{"name": "qwen3:4b"}]}})(),
+            type("Reply", (), {"is_redirect": False, "raise_for_status": lambda self: None,
+                               "json": lambda self: {"message": {"content": "Check soil and water locally before choosing a rotation."}}})(),
+        ]
+        self.assertIn("Check soil", review_strategy({"plants": []}, language="en"))
+        with self.assertRaisesRegex(OllamaUnavailable, "English"):
+            final_review({"message": {"content": "Revise el suelo y el agua antes de sembrar."}}, language="en")
+        system = session.request.call_args.kwargs["json"]["messages"][0]["content"]
+        self.assertIn("ALWAYS reply in clear English", system)
+        self.assertIn("do not invent", system.lower())
+        self.assertIn("local professional", system)
 
 
 class AuthTests(TestCase):

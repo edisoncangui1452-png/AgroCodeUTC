@@ -4,6 +4,7 @@ import 'leaflet-draw'
 import { MapContainer, TileLayer, useMap, useMapEvents, Polygon, Marker, WMSTileLayer } from 'react-leaflet'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+import { useLanguage } from '../i18n'
 
 L.Icon.Default.mergeOptions({ iconUrl: markerIcon, shadowUrl: markerShadow })
 L.drawLocal.draw.toolbar.buttons.polygon = 'Dibujar parcela'
@@ -16,10 +17,19 @@ L.drawLocal.edit.toolbar.actions.save.title = 'Guardar cambios'
 L.drawLocal.edit.toolbar.actions.cancel.title = 'Cancelar'
 
 function MapEditor({ geometry, onChange, onPoint }) {
+  const { t, language } = useLanguage()
   const map = useMap()
   const layer = useRef(null)
   useMapEvents({ click(e) { onPoint?.([e.latlng.lat, e.latlng.lng]) } })
   useEffect(() => {
+    L.drawLocal.draw.toolbar.buttons.polygon = t('Dibujar parcela')
+    L.drawLocal.draw.handlers.polygon.tooltip.start = t('Haz clic para comenzar el polígono.')
+    L.drawLocal.draw.handlers.polygon.tooltip.cont = t('Haz clic para agregar un vértice.')
+    L.drawLocal.draw.handlers.polygon.tooltip.end = t('Haz clic en el primer punto para cerrar.')
+    L.drawLocal.edit.toolbar.buttons.edit = t('Editar parcela')
+    L.drawLocal.edit.toolbar.buttons.remove = t('Eliminar parcela del mapa')
+    L.drawLocal.edit.toolbar.actions.save.title = t('Guardar cambios')
+    L.drawLocal.edit.toolbar.actions.cancel.title = t('Cancelar')
     const drawn = new L.FeatureGroup()
     map.addLayer(drawn)
     const draw = new L.Control.Draw({
@@ -39,7 +49,7 @@ function MapEditor({ geometry, onChange, onPoint }) {
       map.off(L.Draw.Event.CREATED, onCreated); map.off(L.Draw.Event.EDITED, onEdited); map.off(L.Draw.Event.DELETED, onDeleted)
       map.removeControl(draw); map.removeLayer(drawn); layer.current = null
     }
-  }, [map, onChange, onPoint])
+  }, [map, onChange, onPoint, language])
   useEffect(() => {
     if (!layer.current) return
     layer.current.clearLayers()
@@ -47,7 +57,7 @@ function MapEditor({ geometry, onChange, onPoint }) {
       const geo = L.geoJSON({ type: 'Feature', properties: {}, geometry }, { style: { color: '#2d6a4f', weight: 3, fillOpacity: 0.18 } })
       geo.eachLayer(l => layer.current?.addLayer(l))
     }
-  }, [geometry])
+  }, [geometry, language])
   return null
 }
 

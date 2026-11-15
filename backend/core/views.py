@@ -141,7 +141,7 @@ def password_reset(request):
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
         link = f"{settings.FRONTEND_ORIGIN}/restablecer/{uid}/{token}"
-        send_mail("Restablecer acceso a AgroFísica", f"Abre este enlace para cambiar tu contraseña:\n{link}", settings.DEFAULT_FROM_EMAIL, [user.email])
+        send_mail("Restablecer acceso a AgroCode", f"Abre este enlace para cambiar tu contraseña:\n{link}", settings.DEFAULT_FROM_EMAIL, [user.email])
     return Response({"detail": "Si el correo existe, recibirás instrucciones."})
 
 
@@ -366,6 +366,9 @@ class ParcelViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="ai-rotation-review")
     def ai_rotation_review(self, request, pk=None):
         parcel = self.get_object()
+        language = request.data.get("language", "es")
+        if language not in ("es", "en"):
+            raise ValidationError({"language": "Selecciona español o inglés."})
         strategy = request.data.get("crops")
         if not isinstance(strategy, list) or not 1 <= len(strategy) <= 12 or any(
             not isinstance(name, str) or not name.strip() or len(name) > 120 for name in strategy
@@ -393,7 +396,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
             "family_source": "Fichas generales FAO solo en corredor demo de Sierra ecuatoriana; sin ficha en otros casos.",
         }
         try:
-            text = review_strategy(context)
+            text = review_strategy(context, language=language)
         except OllamaUnavailable as exc:
             return Response({"detail": str(exc)}, status=503)
         return Response({

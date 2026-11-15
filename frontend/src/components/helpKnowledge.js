@@ -16,13 +16,21 @@ export const helpTopics = [
   { question: '¿Qué es GIBS?', words: ['gibs', 'satelite', 'capa', 'modis'], answer: 'NASA GIBS agrega una imagen satelital visual al mapa. Puedes elegir su fecha. No se extraen de esa imagen valores numéricos de tu parcela.', path: '/parcelas' },
 ]
 
+const englishWords = [
+  ['create', 'plot', 'draw', 'polygon'], ['country', 'search', 'map'], ['edit', 'delete', 'plot'],
+  ['import', 'geojson', 'file'], ['export', 'download'], ['climate', 'weather', 'nasa'],
+  ['soil', 'moisture'], ['frost', 'cold'], ['forecast', 'prediction'],
+  ['crops', 'crop', 'select'], ['rotation', 'rotations', 'family', 'pest'],
+  ['history', 'record', 'harvest'], ['password', 'account', 'profile'], ['gibs', 'satellite'],
+]
+
 function normalize(text) {
   return String(text).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
 export function answerHelp(question) {
   const words = normalize(question).match(/[a-z0-9]+/g) || []
-  const scored = helpTopics.map(topic => ({
-    topic, score: topic.words.reduce((score, word) => score + (words.includes(word) ? 1 : 0), 0),
+  const scored = helpTopics.map((topic, index) => ({
+    topic, score: [...topic.words, ...englishWords[index]].reduce((score, word) => score + (words.includes(word) ? 1 : 0), 0),
   })).sort((a, b) => b.score - a.score)
   return scored[0]?.score ? scored[0].topic : {
     answer: 'No tengo una respuesta verificada para esa pregunta. Prueba con «parcelas», «clima», «cultivos» o «historial», o contacta a un profesional para dudas agronómicas.',
