@@ -3,7 +3,12 @@ export default {
   theme: {
     extend: {
       fontFamily: { sans: ['DM Sans', 'sans-serif'], display: ['Manrope', 'sans-serif'] },
-      colors: { ink: '#183f30', muted: '#66776a', paper: '#f5faf5', line: '#dce9de', leaf: '#2d6a4f', mint: '#dff3e4' },
+      colors: {
+        ink: 'rgb(var(--brand-rgb) / <alpha-value>)',
+        muted: 'rgb(var(--muted-rgb) / <alpha-value>)',
+        paper: 'rgb(var(--paper-rgb) / <alpha-value>)',
+        line: 'rgb(var(--line-rgb) / <alpha-value>)',
+      },
     },
   },
   plugins: [],

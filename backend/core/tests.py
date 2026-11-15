@@ -174,58 +174,20 @@ class ParcelTests(TestCase):
         del data["PRECTOTCORR"]["20230131"]
         self.assertIsNone(monthly_summary(data, 2023, 2023)[0]["PRECTOTCORR"])
 
-    def test_dashboard_indicators_use_same_complete_month_and_distinct_sources(self):
-        days = [f"202502{day:02}" for day in range(1, 29)]
-        values = {
-            "T2M": {key: 17.3 for key in days},
-            "PRECTOTCORR": {key: 2 for key in days},
-            "GWETTOP": {key: 0.38 for key in days},
-            "T2M_MIN": {key: -1 if day < 4 else 2 for day, key in enumerate(days)},
-        }
-        result = summarize_dashboard_month(values, 2025, 2)
-        self.assertEqual(result["temperature_c"], 17.3)
-        self.assertEqual(result["precipitation_mm"], 56)
-        self.assertEqual(result["soil_wetness_index_percent"], 38)
-        self.assertEqual(result["observed_frost_percent"], 14)
-        del values["PRECTOTCORR"][days[0]]
-        values["GWETTOP"][days[1]] = -999
-        result = summarize_dashboard_month(values, 2025, 2)
-        self.assertIsNone(result["precipitation_mm"])
-        self.assertEqual(result["soil_wetness_index_percent"], 38)
-        values["GWETTOP"] = {}
-        self.assertIsNone(summarize_dashboard_month(values, 2025, 2)["soil_wetness_index_percent"])
-
-    @patch("core.views.get_dashboard_metrics")
-    def test_dashboard_metrics_only_for_owned_parcel(self, metrics):
-        metrics.return_value = {"period": "2025-02", "temperature_c": 17.3}
-        response = self.client.get(f"/api/v1/parcels/{self.parcel.pk}/dashboard-metrics/")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["period"], "2025-02")
-        self.client.force_authenticate(self.bob)
-        self.assertEqual(self.client.get(f"/api/v1/parcels/{self.parcel.pk}/dashboard-metrics/").status_code, 404)
-
-    @patch("core.services.requests.Session")
-    def test_dashboard_metrics_are_cached_without_inventing_values(self, session_class):
-        last_day = timezone.now().date().replace(day=1) - timedelta(days=1)
-        readings = {
-            f"{last_day.year}{last_day.month:02}{day:02}": 0.4
-            for day in range(1, last_day.day + 1)
-        }
-        session_class.return_value.__enter__.return_value.get.return_value.json.return_value = {
-            "properties": {"parameter": {
-                "GWETTOP": readings,
-                "T2M": {key: 15 for key in readings},
-                "T2M_MIN": {key: 2 for key in readings},
-                "PRECTOTCORR": {key: 1 for key in readings},
-            }},
-        }
-        first = get_dashboard_metrics(self.parcel)
-        second = get_dashboard_metrics(self.parcel)
-        self.assertFalse(first["cached"])
-        self.assertTrue(second["cached"])
-        self.assertEqual(first["soil_wetness_index_percent"], 40)
-        self.assertEqual(first["precipitation_mm"], last_day.day)
-        session_class.return_value.__enter__.return_value.get.assert_called_once()
+    def test_daily_coverage_counts_missing_ranges_and_fill_values(self):
+        data = {name: {} for name in PARAMETERS}
+        data["T2M"] = {"20230101": 12, "20230102": -999, "20230104": 14}
+        coverage = daily_coverage(data, 2023, 2023)
+        self.assertEqual(coverage["T2M"]["valid_days"], 2)
+        self.assertEqual(coverage["T2M"]["missing_days"], 363)
+        self.assertEqual(coverage["T2M"]["missing_ranges"][0], {
+            "start": "2023-01-02", "end": "2023-01-03", "days": 2,
+        })
+        self.assertEqual(coverage["T2M"]["coverage_percent"], 0.55)
+        self.assertFalse(coverage["T2M"]["complete"])
+        self.assertEqual(coverage["T2M"]["first_valid_date"], "2023-01-01")
+        self.assertEqual(coverage["T2M"]["last_valid_date"], "2023-01-04")
+        self.assertEqual(coverage["PRECTOTCORR"]["total_days"], 365)
 
     @patch("core.views.get_climate")
     def test_climate_saves_only_own_analysis(self, get_climate):
@@ -235,6 +197,21 @@ class ParcelTests(TestCase):
         self.assertEqual(Analysis.objects.filter(owner=self.alice).count(), 1)
         self.client.force_authenticate(self.bob)
         self.assertEqual(self.client.get("/api/v1/analyses/").data, [])
+
+    @patch("core.views.get_climate")
+    def test_climate_report_contract_has_coverage_without_user_or_parcel_ids(self, get_climate):
+        get_climate.return_value = ({p: {"20230101": 1} for p in PARAMETERS}, True, "2026-01-01T00:00:00Z")
+        response = self.client.get(f"/api/v1/parcels/{self.parcel.pk}/climate/", {"start_year": 2023, "end_year": 2023})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["period"], {"start": "2023-01-01", "end": "2023-12-31"})
+        self.assertTrue(response.data["queried_at"])
+        self.assertEqual(response.data["coverage"]["T2M"]["valid_days"], 1)
+        self.assertEqual(response.data["coverage"]["T2M"]["first_valid_date"], "2023-01-01")
+        self.assertEqual(response.data["coverage"]["T2M"]["last_valid_date"], "2023-01-01")
+        self.assertFalse(response.data["coverage"]["T2M"]["complete"])
+        self.assertNotIn("parcel", response.data)
+        self.assertNotIn("owner", response.data)
+        self.assertNotIn("email", response.data)
 
     def test_unsupported_region_not_recommended(self):
         self.parcel.longitude = -80.0
