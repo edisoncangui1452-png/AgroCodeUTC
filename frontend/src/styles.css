@@ -41,5 +41,15 @@ em { font-family: Georgia, serif; font-weight: 400; }
 .field input:focus, .field select:focus, .field textarea:focus, .input:focus, .select:focus { border-color: #2d6a4f; box-shadow: 0 0 0 2px #95d5b244; }
 .field small { font-size: .75rem; color: #a52a2a; }
 .notice { border: 1px solid #dce9de; border-radius: 9px; background: #f0f8f1; padding: 12px 14px; font-size: .84rem; line-height: 1.5; }
+.plant-2d-canvas { max-height: 330px; background: #edf7ef; }
+.plant-2d-growth { transition: transform .55s ease-out; }
+.plant-2d-leaf { animation: plant-leaf-appear .45s ease-out both; }
+.plant-2d-leaf path { transition: fill .5s ease-out; }
+.plant-2d-soil { transition: fill .5s ease-out; }
+@keyframes plant-leaf-appear { from { opacity: .25; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .plant-2d-growth, .plant-2d-leaf path, .plant-2d-soil { transition: none; }
+  .plant-2d-leaf { animation: none; }
+}
 .leaflet-container { z-index: 0; font-family: 'DM Sans', sans-serif; }
 @media (max-width: 767px) { .hero-visual { min-height: 380px; } .hero-center { width: 145px; height: 145px; } .panel { padding: 20px; } }

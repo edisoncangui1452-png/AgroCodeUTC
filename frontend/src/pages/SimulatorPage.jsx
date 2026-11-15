@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { FlaskConical, MapPinned, Sprout } from 'lucide-react'
 import { api, errorMessage } from '../api'
 import { Empty, Heading, ParcelSelect, useParcels } from './shared'
+import { SimulationVisualPanel } from './PlantSimulation2D'
 import { fertilizerSlots, observationDays, shortCycleCrops } from './simulatorOptions'
 
 export function SimulatorPage() {
@@ -185,6 +186,7 @@ export function SimulatorPage() {
             {result.indicative_harvest_window && <p>Referencia externa de cosecha (no confirmada localmente): {result.indicative_harvest_window.from} a {result.indicative_harvest_window.to}.</p>}
             <p>{result.qualitative_assessment}</p>
             <p>Incertidumbre meteorológica: {result.uncertainty.weather}. Modelo agrícola: {result.uncertainty.crop_model}</p>
+            <SimulationVisualPanel result={result} />
             <div className="grid gap-2 md:grid-cols-2">{result.results.map(row => <article key={row.period_start} className="rounded-lg border border-line bg-paper p-3 text-sm"><strong>{row.period_start === row.period_end ? row.period_start : `${row.period_start} al ${row.period_end}`}</strong><p>Etapa: {row.stage || 'no confirmada'} ({row.stage_source}) · días desde siembra: {row.days_since_sowing.start}–{row.days_since_sowing.end}</p><p>Temperatura: {row.thermal.status} · Agua: {row.water.status} · Humedad: {row.humidity.status} · Radiación: {row.radiation.status}</p><p>Riesgos: {row.risks.map(risk => `${risk.code} (${risk.status})`).join(', ') || 'no identificados con datos disponibles'}.</p>{row.partial_sowing_period && <p>Semana parcialmente anterior a la siembra; no se atribuye clima diario.</p>}{row.meteorological_uncertainty && <p>Dispersión de escenarios meteorológicos disponible; ver panel meteorológico.</p>}{row.missing.length > 0 && <p>Sin dato: {row.missing.join(', ')}</p>}</article>)}</div>
             {result.results.length === 0 && <p>Solo referencia climática histórica: no se proyecta el cultivo con esos datos.</p>}
             <ul className="list-disc pl-5 text-xs">{result.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
