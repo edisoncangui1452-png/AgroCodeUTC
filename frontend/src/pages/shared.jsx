@@ -42,18 +42,21 @@ export function ParcelSelect({ parcels, value, onChange }) {
   </select>
 }
 
-export function CropWindowCards({ candidates = [], duration }) {
-  const matching = candidates.filter(c => c.durations?.[String(duration)]?.length)
+export function CropWindowCards({ candidates = [], duration, primaryOnly = false }) {
+  const matching = candidates.filter(c => c.durations?.[String(duration)]?.length && (!primaryOnly || c.primary_duration === duration))
   return <section className="rounded-2xl border border-line bg-white p-5">
     <div className="flex items-center justify-between gap-3"><h3 className="font-display text-lg font-bold">Ciclos de ~{duration} meses</h3><span className="rounded-full bg-mint px-3 py-1 text-xs font-bold text-leaf">{matching.length} candidatos</span></div>
-    {matching.length ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{matching.map(c => <article key={c.crop} className="rounded-xl border border-line bg-paper p-4">
+    {matching.length ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{matching.map(c => <article key={c.id || c.crop} className="rounded-xl border border-line bg-paper p-4">
       <div className="flex items-start justify-between gap-2"><strong className="flex items-center gap-2 text-base"><span role="img" aria-label={`Ilustración de ${c.crop}`} className="text-2xl">{cropVisuals[c.crop] || '🌱'}</span>{c.crop}</strong><span className="text-xs text-muted">{c.cycle_days}–{c.max_cycle_days} días</span></div>
       <p className="mt-1 text-xs text-muted">{c.family} · {c.regional_validated ? 'Ficha regional' : 'Referencia FAO general'}</p>
+      {primaryOnly && <p className="mt-1 text-xs text-muted">Categoría principal: ~{duration} meses. Rango documentado: {c.cycle_days}–{c.max_cycle_days || c.cycle_days} días.</p>}
+      {primaryOnly && Object.keys(c.durations).length > 1 && <details className="mt-2 text-xs text-muted"><summary className="cursor-pointer">Ver otras duraciones compatibles</summary><p className="mt-1">{Object.keys(c.durations).filter(n => Number(n) !== duration).map(n => `~${n} meses (inicios: ${c.durations[n].map(w => monthNames[w.start_month - 1]).join(', ')})`).join(' · ')}</p><p>La ficha no distingue variedades ni tipos de cosecha; la duración puede variar según manejo y localidad.</p></details>}
       <p className="mt-3 text-sm"><strong>Inicio orientativo:</strong> {c.durations[String(duration)].map(w => monthNames[w.start_month - 1]).join(', ')}</p>
       <p className="mt-2 text-xs text-muted">Se evaluó cada mes del ciclo; al menos 2 temporadas históricas compatibles por inicio.</p>
       <p className="mt-2 text-xs text-muted">Para iniciar en {monthNames[c.durations[String(duration)][0].start_month - 1]}, lluvia histórica del ciclo: {Math.min(...c.durations[String(duration)][0].observed_rain_mm).toFixed(0)}–{Math.max(...c.durations[String(duration)][0].observed_rain_mm).toFixed(0)} mm.</p>
       <p className="mt-2 text-xs text-muted">{c.rain_context}</p>
-      {c.rain_optimal_years === 0 && <p className="mt-2 text-xs font-semibold text-leaf">Atención: ningún año completo coincidió con la lluvia anual óptima de la ficha FAO.</p>}
+      {c.rain_status === 'compatibilidad_parcial' && <p className="mt-2 text-xs font-semibold text-leaf">Compatibilidad parcial: la lluvia anual no coincidió en todos los años con el rango de la ficha FAO. No se ha verificado el agua disponible durante el cultivo.</p>}
+      {c.rain_status === 'sin_datos' && <p className="mt-2 text-xs text-muted">Sin comparación anual suficiente: no se ha verificado el agua disponible durante el cultivo.</p>}
       {c.source && <a className="mt-3 inline-block text-xs font-bold text-leaf underline" href={c.source} target="_blank" rel="noreferrer">Ver ficha FAO ↗</a>}
     </article>)}</div> : <p className="mt-4 text-sm text-muted">No hay ciclos de esta duración con respaldo climático suficiente para esta parcela y periodo.</p>}
   </section>

@@ -30,6 +30,25 @@ class AgronomicProfile(models.Model):
     notes = models.TextField(blank=True)
 
 
+class CropSimulation(models.Model):
+    parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE, related_name="simulations")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    crop = models.CharField(max_length=30)
+    planted_on = models.DateField()
+    quantity = models.PositiveIntegerField()
+    quantity_type = models.CharField(max_length=20)
+    area_m2 = models.FloatField()
+    days = models.PositiveSmallIntegerField()
+    observed_stage = models.CharField(max_length=30, blank=True)
+    observed_soil_condition = models.CharField(max_length=20, blank=True)
+    observed_plants = models.PositiveIntegerField(null=True, blank=True)
+    observed_on = models.DateField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+
 class CropHistory(models.Model):
     parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE, related_name="crop_history")
     crop_name = models.CharField(max_length=120)
