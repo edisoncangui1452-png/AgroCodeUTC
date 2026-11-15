@@ -34,8 +34,10 @@ let toggleAdvancedMode
 let buildLunarYearData
 let buildLunarMonthRows
 let calculateLunarDay
-let getIsoWeekNumber
+let calculatePrincipalPhaseEvents
 let moveLunarDate
+let getLunarAgriculturalRule
+let LUNAR_AGRICULTURAL_RULES
 
 const coverage = {
   T2M: { valid_days: 365, missing_days: 0, total_days: 365, coverage_percent: 100, complete: true, missing_ranges: [] },
@@ -75,6 +77,7 @@ before(async () => {
   const countries = await vite.ssrLoadModule('/src/countries.js')
   const parcelMetrics = await vite.ssrLoadModule('/src/parcelMetrics.js')
   const lunarData = await vite.ssrLoadModule('/src/lunarCalendar.js')
+  const lunarRules = await vite.ssrLoadModule('/src/lunarAgriculturalRules.js')
   const preferences = await vite.ssrLoadModule('/src/preferences.jsx')
   ClimateReport = report.default
   ClimateRequestStatus = status.default
@@ -95,8 +98,10 @@ before(async () => {
   buildLunarYearData = lunarData.buildLunarYearData
   buildLunarMonthRows = lunarData.buildLunarMonthRows
   calculateLunarDay = lunarData.calculateLunarDay
-  getIsoWeekNumber = lunarData.getIsoWeekNumber
+  calculatePrincipalPhaseEvents = lunarData.calculatePrincipalPhaseEvents
   moveLunarDate = lunarData.moveLunarDate
+  getLunarAgriculturalRule = lunarRules.getLunarAgriculturalRule
+  LUNAR_AGRICULTURAL_RULES = lunarRules.LUNAR_AGRICULTURAL_RULES
   PreferencesProvider = preferences.PreferencesProvider
   PreferenceControls = preferences.PreferenceControls
   resolveInitialLanguage = preferences.resolveInitialLanguage
@@ -227,71 +232,112 @@ test('parcel area reuses saved hectares and converts to square metres without in
   assert.equal(selectedParcelArea(parcels, '1', null), null)
 })
 
-test('lunar calendar calculates all 2026 days with SunCalc and ISO weeks', () => {
+test('lunar calendar calculates SunCalc event instants and Sunday-first 2026 rows', () => {
+  const events = calculatePrincipalPhaseEvents(2026)
+  assert.ok(events.length >= 48 && events.length <= 52)
+  assert.ok(events.every(event => event.time instanceof Date && event.time.getFullYear() === 2026))
+  for (const [key, target] of [['new', 0], ['first-quarter', 0.25], ['full', 0.5], ['last-quarter', 0.75]]) {
+    const event = events.find(item => item.key === key)
+    assert.ok(event, 'Missing ' + key + ' event')
+    const difference = Math.abs(event.phase - target)
+    assert.ok(Math.min(difference, 1 - difference) < 1e-5, 'Unexpected phase instant for ' + key)
+  }
+
   const year = buildLunarYearData(2026)
   assert.equal(Object.keys(year).length, 365)
-  const newMoon = calculateLunarDay(2026, 10, 9)
-  const fullMoon = calculateLunarDay(2026, 10, 24)
-  assert.equal(newMoon.principalPhase, 'new')
-  assert.equal(fullMoon.principalPhase, 'full')
-  assert.ok(newMoon.fraction >= 0 && newMoon.fraction <= 1)
-  assert.ok(Number.isInteger(newMoon.percentVisible))
-  assert.equal(getIsoWeekNumber(new Date(Date.UTC(2026, 10, 15))), 46)
-  assert.deepEqual(buildLunarMonthRows(2026, 10, year).map(row => row.week), [44, 45, 46, 47, 48, 49])
+  assert.ok(Object.values(year).some(day => day.principalPhase === 'new' && day.event?.time instanceof Date))
+  assert.ok(Object.values(year).every(day => day.fraction >= 0 && day.fraction <= 1 && Number.isInteger(day.percentVisible)))
+
+  const october = buildLunarMonthRows(2026, 9, year)
+  assert.equal(october.length, 5)
+  assert.equal(october[0].cells[0].date, '2026-09-27')
+  assert.equal(october[0].cells[0].outsideMonth, true)
+  assert.ok(october.every(row => row.cells.length === 7))
+  const november = buildLunarMonthRows(2026, 10, year)
+  assert.equal(november.length, 5)
+  assert.equal(november.at(-1).cells[6].date, '2026-12-05')
+  assert.equal(november.at(-1).cells[6].outsideMonth, true)
+  assert.equal(buildLunarMonthRows(2026, 12, year).length, 0)
   assert.equal(moveLunarDate('2026-11-15', 1), '2026-11-16')
   assert.equal(moveLunarDate('2026-12-31', 1), null)
   assert.equal(moveLunarDate('2026-01-01', -1), null)
 })
 
-test('lunar calendar renders the fixed 2026 grid, source notice, and accessible selection', () => {
+test('central agricultural rules cover each phase and the defined intermediate support icons', () => {
+  const phases = LUNAR_AGRICULTURAL_RULES.phases
+  assert.equal(phases.new.recommendation, 'No sembrar / Descanso y preparación')
+  assert.equal(phases.waxing.recommendation, 'Siembra de hojas / Siembra de flores')
+  assert.equal(phases.full.recommendation, 'Cosecha general / Recolección')
+  assert.equal(phases.waning.recommendation, 'Poda de formación / Control de plagas')
+
+  const intermediate = phase => ({ phase, waxing: phase < 0.5, principalPhase: null })
+  assert.equal(getLunarAgriculturalRule(intermediate(0.1)).recommendation, phases.waxing.recommendation)
+  assert.equal(getLunarAgriculturalRule(intermediate(0.1)).supportIconKey, 'roots')
+  assert.equal(getLunarAgriculturalRule(intermediate(0.35)).recommendation, phases.full.recommendation)
+  assert.equal(getLunarAgriculturalRule(intermediate(0.35)).supportIconKey, 'watering')
+  assert.equal(getLunarAgriculturalRule(intermediate(0.65)).recommendation, phases.waning.recommendation)
+  assert.equal(getLunarAgriculturalRule(intermediate(0.65)).supportIconKey, 'roots')
+  assert.equal(getLunarAgriculturalRule(intermediate(0.9)).recommendation, phases.new.recommendation)
+  assert.equal(getLunarAgriculturalRule(intermediate(0.9)).supportIconKey, 'watering')
+  assert.deepEqual(LUNAR_AGRICULTURAL_RULES.activityLegend.map(item => item.label), [
+    'Poda', 'Siembra de Raíces', 'Siembra de Hojas', 'Siembra de Flores', 'Recolección', 'Riego/Abonado', 'Control de Plagas',
+  ])
+})
+
+test('agricultural lunar calendar renders farm banner, exact events, recommendations, guide, and legend', () => {
   const today = new Date(2026, 10, 15, 12)
   const html = render(React.createElement(LunarCalendar, { open: true, language: 'es', today, onClose() {} }))
-  assert.match(html, /Noviembre 2026/)
-  const headers = ['Semana', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'].map(day => html.indexOf(`role="columnheader">${day}</span>`))
+  assert.match(html, /CALENDARIO LUNAR AGRÍCOLA - NOVIEMBRE 2026/)
+  assert.match(html, /Observa la Luna, trabaja la tierra y cosecha abundancia/)
+  assert.match(html, /class=\"lunar-farm-illustration\"/)
+  assert.match(html, /role=\"columnheader\">Do<\/span>/)
+  const headers = ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá'].map(day => html.indexOf('role=\"columnheader\">' + day + '</span>'))
   assert.ok(headers.every(index => index >= 0))
   assert.deepEqual([...headers].sort((a, b) => a - b), headers)
-  assert.match(html, /role="rowheader" class="lunar-week-number">46<\/span>/)
+
+  const dayCells = html.match(/<button type=\"button\" role=\"gridcell\"[^>]*class=\"lunar-day-cell[^\"]*\"[^>]*>[\s\S]*?<\/button>/g) || []
+  assert.equal(dayCells.length, 35)
+  assert.ok(dayCells.every(cell => cell.includes('class=\"lunar-moon-image\"') && cell.includes('class=\"lunar-recommendation\"')))
+  assert.match(dayCells[30], /class="lunar-date-number">1<span class="lunar-date-month"> DIC<\/span>/)
+  assert.ok(dayCells.some(cell => /class=\"lunar-event-label\">\d{2} (?:NOV|DIC) - \d{2}:\d{2} (?:LUNA NUEVA|CUARTO CRECIENTE|LUNA LLENA|CUARTO MENGUANTE)<\/span>/.test(cell)))
   assert.match(html, /lunar-day-selected lunar-day-today/)
-  assert.match(html, /role="img" aria-label="Luna en fase/)
-  assert.equal((html.match(/role="img" aria-label="Luna en fase/g) || []).length, 30)
-  assert.equal((html.match(/class="lunar-date-caption"/g) || []).length, 30)
-  assert.match(html, /class="lunar-date-number">15<\/span><svg class="lunar-moon-image"/)
-  assert.match(html, /% visible/)
-  assert.match(html, /Luna nueva/)
-  assert.match(html, /Luna llena/)
-  assert.match(html, /Fases calculadas con SunCalc 2\.1\.4\. No son datos de NASA POWER ni de NASA GIBS\./)
-  assert.match(html, /Mes siguiente/)
-  assert.match(html, /Hoy/)
+  assert.match(html, /aria-label=\"Luna en fase .*% visible\"/)
+  assert.match(html, /class=\"lunar-activity-icon[^\"]*\" role=\"img\" aria-label=\"Actividad de apoyo:/)
+  assert.equal((html.match(/class=\"lunar-phase-guide-card\"/g) || []).length, 4)
+  assert.match(html, /Guía de fases lunares/)
+  assert.equal((html.match(/<li><svg/g) || []).length, 7)
+  assert.match(html, /Fases calculadas con SunCalc 2\.1\.4\. Las recomendaciones son prácticas tradicionales según la fase lunar, no son datos de NASA POWER ni de NASA GIBS y no sustituyen asesoría agronómica\./)
 
   const january = render(React.createElement(LunarCalendar, { open: true, language: 'es', today: new Date(2026, 0, 15, 12) }))
   const december = render(React.createElement(LunarCalendar, { open: true, language: 'es', today: new Date(2026, 11, 15, 12) }))
-  assert.match(january, /Enero 2026/)
-  assert.match(january, /aria-label="Mes anterior" disabled=""/)
-  assert.match(december, /Diciembre 2026/)
-  assert.match(december, /aria-label="Mes siguiente" disabled=""/)
+  assert.match(january, /ENERO 2026/)
+  assert.match(january, /aria-label=\"Mes anterior\" disabled=\"\"/)
+  assert.match(december, /DICIEMBRE 2026/)
+  assert.match(december, /aria-label=\"Mes siguiente\" disabled=\"\"/)
 
   const calendar = readFileSync(resolve(process.cwd(), 'src/components/LunarCalendar.jsx'), 'utf8')
   const workspace = readFileSync(resolve(process.cwd(), 'src/pages/Workspace.jsx'), 'utf8')
   const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8')
   assert.match(workspace, /setOpen\(true\)/)
-  assert.match(workspace, /aria-haspopup="dialog"/)
+  assert.match(workspace, /aria-haspopup=\"dialog\"/)
   assert.match(calendar, /aria-label=.*Cerrar calendario/)
   assert.match(calendar, /onCancel=\{event => \{ event\.preventDefault\(\); closeDialog\(\) \}\}/)
   assert.match(calendar, /event\.target === dialogRef\.current/)
   assert.match(calendar, /ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7/)
-  assert.match(styles, /--lunar-banner: #15558b/)
-  assert.match(styles, /--lunar-banner: #286b98/)
+  assert.match(styles, /\.lunar-dialog \{ width: 100vw/)
+  assert.match(styles, /\.lunar-grid-row \{ grid-template-columns: repeat\(7, minmax\(0, 1fr\)\)/)
+  assert.ok((360 - 12 - 2) / 7 >= 44, 'Date columns should stay at least 44px wide at 360px')
   assert.match(styles, /--lunar-outline: #15558b/)
   assert.match(styles, /--lunar-outline: #61b7e8/)
-  assert.match(styles, /\.lunar-dialog \{ width: 100vw/)
-  assert.match(styles, /\.lunar-grid-row \{ grid-template-columns: 36px repeat\(7, minmax\(0, 1fr\)\)/)
+  assert.match(styles, /--lunar-event-surface: #16251b/)
+  assert.match(styles, /--lunar-event-surface: #101a14/)
   assert.ok(contrastRatio('#ffffff', '#15558b') >= 4.5)
   assert.ok(contrastRatio('#ffffff', '#286b98') >= 4.5)
   assert.ok(contrastRatio('#15558b', '#e5f0f2') >= 3)
   assert.ok(contrastRatio('#61b7e8', '#263f43') >= 3)
-  assert.ok((360 - 12 - 2 - 36) / 7 >= 44, 'Date columns should stay at least 44px wide at a 360px viewport')
+  assert.ok(contrastRatio('#ffffff', '#16251b') >= 4.5)
+  assert.ok(contrastRatio('#ffffff', '#101a14') >= 4.5)
 })
-
 test('profile overview uses a real initial, profile fields, parcel count, icons, and no invented account facts', () => {
   const html = render(React.createElement(ProfileOverview, { firstName: 'Rosa', email: 'rosa@example.com', parcels: [parcel], parcelsState: 'ready' }))
   assert.match(html, /role="img" aria-label="Avatar de Rosa, inicial R"/)

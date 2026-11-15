@@ -8,7 +8,7 @@ El tema oscuro mantiene la paleta verde y tierra. El selector global aparece tam
 
 Las pantallas principales usan texto base de 16 px, foco visible, controles de al menos 44 px, tarjetas adaptables y una ilustración de surcos hecha con CSS. La textura puede prescindirse respetando `prefers-reduced-motion`; la hoja de estilos elimina animaciones cuando el sistema solicita movimiento reducido. En impresión, la ficha usa tinta negra y fondo blanco para seguir siendo legible en escala de grises.
 
-La traducción al inglés está completa en la ficha, el historial climático, el modo avanzado, el resumen visual, el calendario lunar, sus estados y el asistente. Varias pantallas heredadas (por ejemplo, parcelas, historial agrícola y perfil) continúan en español. Al elegir inglés se muestra un aviso persistente de que quedan secciones en español; las cadenas que pasan por el helper de traducción tienen un marcador `[ES]` si falta una traducción.
+La traducción al inglés está completa en la ficha climática, el modo avanzado, el resumen visual y el asistente. El calendario lunar agrícola y varias pantallas heredadas (por ejemplo, parcelas, historial agrícola y perfil) permanecen en español; al elegir inglés se muestra un aviso persistente de las secciones aún no traducidas.
 
 ## Consulta, ficha y cobertura
 
@@ -37,7 +37,7 @@ El modo avanzado no calcula tendencias, pronósticos, nuevos promedios ni recome
 
 El **Resumen visual por mes** toma los valores y unidades mensuales que ya vienen en la respuesta. Presenta iconos con etiqueta, valor, unidad y cobertura diaria solo donde existe un valor; las variables faltantes aparecen en una línea separada como **Dato no disponible**.
 
-El calendario lunar es una vista separada, fija para 2026, y no depende del periodo de la ficha. Usa SunCalc 2.1.4: para cada día consulta la fracción iluminada y fase a las 12:00 hora local del navegador, redondea la fracción al porcentaje entero mostrado y enseña el nombre de fase principal cuando está a 0,5 días o menos de esa fase. La luna se dibuja en SVG local desde los datos de SunCalc. Las semanas siguen ISO 8601, con lunes como primer día. No presenta consejos de siembra, riego ni cosecha. El pie indica: **Fases calculadas con SunCalc 2.1.4. No son datos de NASA POWER ni de NASA GIBS.**
+El calendario agrícola lunar es una vista independiente, fija para 2026. Calcula la iluminación diaria a las 12:00 hora local con SunCalc 2.1.4, resuelve los instantes de fases principales desde la curva de fase de la librería y renderiza las lunas en SVG. Sus recomendaciones salen de la única tabla tradicional en frontend/src/lunarAgriculturalRules.js; las reglas no son datos de NASA ni asesoría agronómica personalizada. El pie avisa que son prácticas tradicionales y no sustituyen asesoría agronómica. Ver el detalle y la tabla completa en AJUSTES_UI_UX.md.
 
 ## Asistente lateral
 
@@ -49,7 +49,7 @@ El panel **Asistente** es un mock de plantillas en el navegador; no hay endpoint
 - **NASA GIBS:** solo capa visual; no es fuente de análisis climático.
 - **Historial:** los años consultados no son un pronóstico.
 - **Asistente:** mock local; no genera respuestas reales con un modelo.
-- **Calendario lunar:** vista fija de 2026 calculada con SunCalc 2.1.4 a las 12:00 hora local; no representa datos de NASA ni ofrece precisión de efeméride observada.
+- **Calendario lunar:** fases calculadas localmente con SunCalc 2.1.4, eventos derivados de la fase de la librería, y reglas agrícolas tradicionales centralizadas; no es dato de NASA ni asesoría personalizada.
 - **PDF:** se obtiene con la impresión del navegador.
 - **Idioma:** la experiencia climática está en español e inglés; ciertas pantallas heredadas siguen en español y muestran un aviso al usar inglés.
 

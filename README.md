@@ -64,4 +64,4 @@ El renombre global a AgrocodeUTC se verificó con una búsqueda final sin distin
 
 ## Ajustes de UI y UX
 
-Las preferencias de apariencia, el selector de país ISO, la medición de superficie, el perfil visual y el calendario lunar 2026 están descritos en [`docs/AJUSTES_UI_UX.md`](docs/AJUSTES_UI_UX.md). El calendario usa SunCalc 2.1.4 a las 12:00 hora local; no son datos de NASA ni recomendaciones agronómicas.
+Las preferencias de apariencia, el selector de país ISO, la medición de superficie, el perfil visual y el calendario lunar 2026 están descritos en [`docs/AJUSTES_UI_UX.md`](docs/AJUSTES_UI_UX.md). El calendario agrícola usa SunCalc 2.1.4 a las 12:00 hora local y reglas tradicionales centralizadas; no es dato de NASA ni asesoría agronómica personalizada.
