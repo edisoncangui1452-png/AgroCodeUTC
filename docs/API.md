@@ -35,4 +35,26 @@ En `historical-baseline`, `rain_mm` es el producto de la tasa mensual en mm/día
 
 `recommend/` y `climate/` conservan `crop_windows`/`candidates` e incorporan por cultivo `id`, `primary_duration` y `rain_status` (`sin_datos`, `en_rango_historico` o `compatibilidad_parcial`). El rango completo de días y las ventanas `durations` originales permanecen. `rotations/` conserva las tres estrategias y amplía `guidance` con el cultivo anterior registrado, familias, información declarada de suelo/riego y contexto de lluvia **solo si ya existe una consulta diaria cacheada para el mismo punto**. No se realiza una nueva consulta NASA para comparar rotaciones.
 
+### Meteorología del simulador (FASE 2)
+
+`GET /api/v1/parcels/{id}/simulator-weather/?days=4|7|45&refresh=0|1` requiere sesión y propiedad de la parcela; `refresh=1` intenta una nueva consulta. HTTP 400 para modalidad/coordenadas inválidas, 404 para parcela ajena, 503 si no hay fuente disponible. Respuesta privada sin caché de navegador:
+
+```json
+{
+  "parcel": 1, "coordinates": {"latitude": -1.66, "longitude": -78.64},
+  "days": 4, "information_type": "forecast", "measurement_type": "model_forecast",
+  "demonstration_scenario": false, "source": "Open-Meteo",
+  "model": "ECMWF IFS (Open-Meteo)", "queried_at": "2026-11-15T12:00:00+00:00",
+  "issued_at": null, "fetched_at": "2026-11-15T12:00:00+00:00",
+  "valid_from": "2026-11-15", "valid_to": "2026-11-18",
+  "timezone": "UTC", "resolution": "daily", "cached": false, "stale": false,
+  "age_seconds": 0, "units": {"temperature_mean_c": "°C", "precipitation_mm": "mm"},
+  "rows": [{"period_start": "2026-11-15", "period_end": "2026-11-15",
+    "values": {"temperature_mean_c": 15.5, "precipitation_mm": null},
+    "missing": ["precipitation_mm"], "uncertainty": null}]
+}
+```
+
+Los campos `units` y `values` reales incluyen también temperatura mínima/máxima (`°C`), humedad relativa del aire (`%`), radiación solar (`MJ/m²`) y humedad volumétrica superficial del suelo convertida de `m³/m³` a `% volumétrico` si existe. `variable_origin` distingue pronóstico meteorológico de estimación modelada de humedad de suelo; no se presentan observaciones locales ni escenarios demostrativos (`demonstration_scenario=false`). Los valores ausentes son `null`, nunca cero ficticio; `missing` contiene las claves faltantes por fila. En 4/7 días cada fila es diaria. En 45 días `information_type=subseasonal_forecast`, `resolution=weekly`: cada valor con miembros se resume como media de sus agregados semanales, `basis` especifica `ensemble_mean`, `control_run` o `missing` por variable y `uncertainty` contiene los extremos de miembros EC46 para temperatura media semanal y precipitación acumulada semanal (no intervalos de confianza). Si no hay EC46 ni caché anterior, `information_type=historical`, `source=NASA POWER`, `resolution=historical_month`, `historical_period=[1983,2025]`, fechas `valid_from/valid_to` y `period_start/period_end` nulas, `reference_month` y percentiles históricos `p10/p90`: **no son pronósticos**. `issued_at` es `null` si Open-Meteo no publica la emisión en la respuesta; jamás se deduce de `fetched_at`.
+
 El perfil de parcela admite `soil_texture` entre las 11 clases ofrecidas por la interfaz e `irrigation` con `Sí`, `No` o vacío (desconocido). `water_availability` anterior permanece en la base de datos para preservar registros históricos, pero no se ofrece como campo editable.

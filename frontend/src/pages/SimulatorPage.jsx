@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { FlaskConical, MapPinned, Sprout } from 'lucide-react'
 import { api, errorMessage } from '../api'
@@ -17,6 +17,17 @@ export function SimulatorPage() {
   const [area, setArea] = useState('')
   const [days, setDays] = useState(4)
   const [review, setReview] = useState(null)
+  const [weather, setWeather] = useState(null)
+  const [weatherError, setWeatherError] = useState('')
+  const [weatherBusy, setWeatherBusy] = useState(false)
+  const requestVersion = useRef(0)
+
+  useEffect(() => {
+    requestVersion.current += 1
+    setWeather(null)
+    setWeatherError('')
+    setWeatherBusy(false)
+  }, [id])
 
   useEffect(() => {
     api.get('crops/').then(({ data }) => setCatalog(data.results || data))
@@ -28,9 +39,36 @@ export function SimulatorPage() {
   const areaTooLarge = parcel && area !== '' && areaNumber > Number(parcel.area_ha)
 
   function selectParcel(value) {
+    requestVersion.current += 1
     setParams(value ? { parcela: value } : {})
     setReview(null)
     setArea('')
+    setWeather(null)
+    setWeatherError('')
+    setWeatherBusy(false)
+  }
+
+  function selectDays(value) {
+    requestVersion.current += 1
+    setDays(value)
+    setReview(null)
+    setWeather(null)
+    setWeatherError('')
+    setWeatherBusy(false)
+  }
+
+  async function loadWeather(refresh = false) {
+    const version = ++requestVersion.current
+    setWeatherBusy(true)
+    setWeatherError('')
+    try {
+      const { data } = await api.get(`parcels/${id}/simulator-weather/`, { params: { days, refresh: refresh ? 1 : 0 } })
+      if (version === requestVersion.current) setWeather(data)
+    } catch (error) {
+      if (version === requestVersion.current) setWeatherError(errorMessage(error))
+    } finally {
+      if (version === requestVersion.current) setWeatherBusy(false)
+    }
   }
 
   function submit(event) {
@@ -42,7 +80,7 @@ export function SimulatorPage() {
   }
 
   return <div>
-    <Heading eyebrow="04 / LABORATORIO AGRÍCOLA" title="Simulador agrícola" description="Configure una observación para su parcela. En esta primera fase solo se prepara la interfaz: no se calculan resultados ni se predicen cosechas." />
+    <Heading eyebrow="04 / LABORATORIO AGRÍCOLA" title="Simulador agrícola" description="Configure una observación y consulte el contexto meteorológico de su parcela. No se calculan crecimiento, fertilización ni cosechas." />
     {!loading && !parcels.length ? <div className="mt-8"><Empty icon={MapPinned} title="Primero registre una parcela" text="Necesita una parcela para preparar su configuración de simulación." to="/parcelas" action="Crear parcela" /></div> : <div className="mt-8 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_290px]">
       <div className="min-w-0 space-y-5">
         <section className="panel">
@@ -74,12 +112,52 @@ export function SimulatorPage() {
             <fieldset>
               <legend className="text-sm font-bold">Modalidad de observación</legend>
               <div className="mt-3 flex flex-wrap gap-3">{observationDays.map(value => <label key={value} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold ${days === value ? 'border-leaf bg-mint' : 'border-line bg-paper'}`}>
-                <input type="radio" name="modalidad" value={value} checked={days === value} onChange={() => { setDays(value); setReview(null) }} /> {value} días
+                <input type="radio" name="modalidad" value={value} checked={days === value} onChange={() => selectDays(value)} /> {value} días
               </label>)}</div>
             </fieldset>
             <button className="button button-dark" type="submit" disabled={!parcel || !crop || areaTooLarge}>Revisar configuración</button>
           </form>
           {review && <div role="status" className="notice mt-5"><strong>Configuración preparada (sin simulación)</strong><p className="mt-2">Parcela: {review.parcel} · Cultivo: {review.crop} · Cantidad sembrada: {review.quantity} · Superficie: {review.area} ha · Modalidad: {review.days} días.</p><p className="mt-2">No se ha calculado crecimiento, fertilización ni rendimiento. Esta configuración no se guarda todavía.</p></div>}
+        </section>
+        <section className="panel">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div><h2 className="text-xl font-bold">Contexto meteorológico</h2><p className="mt-2 text-sm text-muted">Consulta desde el servidor las coordenadas registradas de su parcela. Para 45 días se muestran semanas y escenarios, nunca fechas de cosecha.</p></div>
+            <button type="button" className="button button-dark" disabled={!parcel || weatherBusy} onClick={() => loadWeather(Boolean(weather))}>{weatherBusy ? 'Consultando…' : weather ? 'Actualizar datos' : 'Consultar datos meteorológicos'}</button>
+          </div>
+          {weatherBusy && <p role="status" className="mt-4 text-sm text-muted">Consultando el servicio meteorológico…</p>}
+          {weatherError && <p role="alert" className="notice mt-4">{weatherError}{weather && ' Los datos anteriores siguen visibles; compruebe la fecha de actualización.'}</p>}
+          {weather && <div className="mt-5">
+            <div className="notice">
+              <strong>{weather.information_type === 'historical' ? 'Referencia histórica — NO pronóstico' : weather.information_type === 'subseasonal_forecast' ? 'Tendencias subestacionales — EC46' : 'Pronóstico meteorológico diario'} · {weather.days} días</strong>
+              <p className="mt-2">Fuente: {weather.source} · Modelo: {weather.model}</p>
+              <p>Última actualización: {new Date(weather.fetched_at).toLocaleString('es-EC', { timeZone: 'UTC' })} UTC · {weather.cached ? weather.stale ? `Caché anterior (${Math.floor(weather.age_seconds / 3600)} h)` : 'Desde caché' : 'Consulta nueva'}</p>
+              <p>Emisión del modelo: {weather.issued_at ? new Date(weather.issued_at).toLocaleString('es-EC', { timeZone: 'UTC' }) + ' UTC' : 'no publicada en esta respuesta'}</p>
+              <p className="mt-2">{weather.notice}</p>
+            </div>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">{weather.rows.map((row, index) => <article key={row.period_start || `month-${row.reference_month}-${index}`} className="rounded-xl border border-line bg-paper p-4">
+              <h3 className="font-bold">{weather.information_type === 'historical' ? `Mes histórico: ${new Intl.DateTimeFormat('es-EC', { month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2020, row.reference_month - 1, 1)))}` : row.period_start === row.period_end ? row.period_start : `${row.period_start} al ${row.period_end}`}</h3>
+              <p className="mt-1 text-xs text-muted">{weather.resolution === 'weekly' ? 'Resumen semanal del conjunto EC46; no predicción diaria exacta.' : weather.information_type === 'historical' ? 'Medianas mensuales 1983–2025; no corresponden al futuro.' : 'Pronóstico diario del modelo.'}</p>
+              <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                {[
+                  ['Temp. mínima', 'temperature_min_c'], ['Temp. media', 'temperature_mean_c'],
+                  ['Temp. máxima', 'temperature_max_c'], ['Precipitación', 'precipitation_mm'],
+                  ['Humedad del aire', 'relative_humidity_air_percent'], ['Radiación solar', 'solar_radiation_mj_m2'],
+                  ['Humedad del suelo (modelo)', 'soil_moisture_model_percent'],
+                ].map(([label, key]) => <div key={key}><dt className="text-xs text-muted">{label}</dt><dd className="font-semibold">{row.values[key] === null ? 'Sin dato' : `${row.values[key]} ${weather.units[key]}`}</dd></div>)}
+              </dl>
+              {row.basis && Object.values(row.basis).includes('control_run') && <p className="mt-3 text-xs text-muted">Donde faltaron miembros del conjunto se muestra la corrida base EC46; no se interpreta como media del conjunto.</p>}
+              {row.uncertainty && <div className="mt-3 border-t border-line pt-3 text-xs text-muted">
+                <strong>{weather.information_type === 'historical' ? 'Dispersión histórica (no pronóstico)' : 'Escenarios entre miembros (no intervalo de confianza)'}</strong>
+                {Object.entries(row.uncertainty).map(([key, interval]) => <p key={key} className="mt-1">{key === 'precipitation_mm' ? 'Precipitación' : 'Temperatura media'}: {interval.min ?? interval.p10}–{interval.max ?? interval.p90} {weather.units[key]}{interval.members ? ` · ${interval.members} miembros` : ''}</p>)}
+              </div>}
+              {row.missing.length > 0 && <p className="mt-3 text-xs text-muted">Variables sin dato: {row.missing.map(key => ({
+                temperature_min_c: 'temperatura mínima', temperature_mean_c: 'temperatura media', temperature_max_c: 'temperatura máxima',
+                precipitation_mm: 'precipitación', relative_humidity_air_percent: 'humedad del aire',
+                solar_radiation_mj_m2: 'radiación solar', soil_moisture_model_percent: 'humedad del suelo',
+              })[key]).join(', ')}.</p>}
+            </article>)}</div>
+            <p className="mt-4 text-xs text-muted">La humedad relativa del aire es distinta de la humedad volumétrica del suelo estimada por el modelo. Fuente meteorológica: <a href="https://open-meteo.com/" target="_blank" rel="noreferrer" className="underline">Open-Meteo</a> y ECMWF; la referencia histórica, cuando aparece, es NASA POWER.</p>
+          </div>}
         </section>
         <section className="panel">
           <h2 className="flex items-center gap-2 text-xl font-bold"><FlaskConical size={22} /> Fertilizantes</h2>
@@ -94,7 +172,7 @@ export function SimulatorPage() {
         <h2 className="text-lg font-bold">Parcela de referencia</h2>
         <label className="field mt-4">Elegir parcela<ParcelSelect parcels={parcels} value={id} onChange={selectParcel} /></label>
         {parcel ? <div className="mt-4 rounded-xl bg-paper p-4"><strong>{parcel.name}</strong><p className="mt-1 text-sm text-muted">{parcel.location || parcel.country} · {parcel.area_ha} ha registradas</p></div> : <p className="mt-4 text-sm text-muted">Seleccione una parcela para revisar la configuración.</p>}
-        <p className="mt-4 border-t border-line pt-4 text-xs leading-relaxed text-muted">Este apartado no consulta el clima ni modifica sus análisis existentes. La información histórica de NASA POWER no es un pronóstico.</p>
+        <p className="mt-4 border-t border-line pt-4 text-xs leading-relaxed text-muted">El contexto meteorológico se consulta únicamente al pulsar el botón. NASA POWER histórico no es un pronóstico y EC46 no predice el clima exacto de la parcela.</p>
       </aside>
     </div>}
   </div>

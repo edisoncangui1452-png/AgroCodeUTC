@@ -20,6 +20,7 @@ from rest_framework.response import Response
 from .models import AgronomicProfile, Agronomist, Analysis, Crop, CropHistory, Parcel
 from .agronomy import cached_rotation_months, rotation_guidance
 from .ollama import OllamaUnavailable, check_model, review_strategy
+from .simulator_weather import WeatherUnavailable, get_simulator_weather
 from .serializers import (
     AgronomistSerializer, AnalysisSerializer, CropSerializer, HistorySerializer,
     ParcelSerializer, ProfileSerializer, RegisterSerializer, UserSerializer,
@@ -211,6 +212,21 @@ class ParcelViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
+
+    @action(detail=True, methods=["get"], url_path="simulator-weather")
+    def simulator_weather(self, request, pk=None):
+        parcel = self.get_object()
+        try:
+            days = int(request.query_params.get("days", "4"))
+            refresh = request.query_params.get("refresh", "0")
+            if refresh not in ("0", "1"):
+                raise ValueError("El parámetro refresh debe ser 0 o 1.")
+            result = get_simulator_weather(parcel, days, refresh=refresh == "1")
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        except WeatherUnavailable as exc:
+            return Response({"detail": str(exc)}, status=503, headers={"Cache-Control": "private, no-store"})
+        return Response(result, headers={"Cache-Control": "private, no-store"})
 
     @action(detail=True, methods=["get"], url_path="dashboard-metrics")
     def dashboard_metrics(self, request, pk=None):
