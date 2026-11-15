@@ -2,7 +2,11 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from .models import AgronomicProfile, Agronomist, Analysis, Crop, CropHistory, Parcel
+from .models import AgronomicProfile, Agronomist, Analysis, Crop, CropHistory, CropSimulation, Parcel
+from .simulator_crops import CROPS
+from .simulator_engine import STAGES
+from django.utils import timezone
+import math
 from .services import validate_geometry
 
 User = get_user_model()
@@ -56,6 +60,60 @@ class ParcelSerializer(serializers.ModelSerializer):
             self.validated_data.get("geometry", self.instance.geometry if self.instance else None)
         )
         return super().save(**kwargs)
+
+
+class SimulationSerializer(serializers.ModelSerializer):
+    crop = serializers.ChoiceField(choices=list(CROPS))
+    quantity_type = serializers.ChoiceField(choices=["seeds", "established_plants"])
+    observed_stage = serializers.ChoiceField(choices=["", *STAGES], required=False)
+    observed_soil_condition = serializers.ChoiceField(choices=["", "seco", "encharcado", "humedo"], required=False)
+    observed_plants = serializers.IntegerField(min_value=0, required=False, allow_null=True)
+
+    class Meta:
+        model = CropSimulation
+        fields = ["id", "parcel", "crop", "planted_on", "quantity", "quantity_type", "area_m2",
+                  "days", "observed_stage", "observed_soil_condition", "observed_plants",
+                  "observed_on", "updated_at"]
+        read_only_fields = ["id", "updated_at"]
+        extra_kwargs = {"quantity": {"min_value": 1}, "area_m2": {"min_value": 0.000001}}
+
+    def validate_parcel(self, parcel):
+        if parcel.owner_id != self.context["request"].user.pk:
+            raise serializers.ValidationError("Esta parcela no te pertenece.")
+        return parcel
+
+    def validate_days(self, value):
+        if value not in (4, 7, 45):
+            raise serializers.ValidationError("Modalidad inválida.")
+        return value
+
+    def validate(self, attrs):
+        instance = self.instance
+        parcel = attrs.get("parcel", getattr(instance, "parcel", None))
+        planted = attrs.get("planted_on", getattr(instance, "planted_on", None))
+        area = attrs.get("area_m2", getattr(instance, "area_m2", None))
+        observed_on = attrs.get("observed_on", getattr(instance, "observed_on", None))
+        observed_plants = attrs.get("observed_plants", getattr(instance, "observed_plants", None))
+        quantity = attrs.get("quantity", getattr(instance, "quantity", None))
+        quantity_type = attrs.get("quantity_type", getattr(instance, "quantity_type", None))
+        stage = attrs.get("observed_stage", getattr(instance, "observed_stage", ""))
+        soil = attrs.get("observed_soil_condition", getattr(instance, "observed_soil_condition", ""))
+        if parcel and area is not None and (not math.isfinite(area) or area > parcel.area_ha * 10000):
+            raise serializers.ValidationError({"area_m2": "Superficie inválida o superior a la parcela."})
+        if planted and planted > timezone.localdate():
+            raise serializers.ValidationError({"planted_on": "La fecha de siembra no puede ser futura."})
+        if observed_on and (observed_on < planted or observed_on > timezone.localdate()):
+            raise serializers.ValidationError({"observed_on": "La observación debe estar entre siembra y hoy."})
+        if (stage or soil or observed_plants is not None) and observed_on is None:
+            raise serializers.ValidationError({"observed_on": "Indique fecha para datos observados."})
+        if observed_plants is not None and quantity is not None and observed_plants > quantity:
+            raise serializers.ValidationError({"observed_plants": "No puede exceder la cantidad inicial sin registrar nuevas siembras."})
+        if observed_plants is not None and quantity_type == "established_plants" and observed_plants > quantity:
+            raise serializers.ValidationError({"observed_plants": "Cantidad observada inconsistente."})
+        if instance and any(key in attrs for key in ("parcel", "crop", "planted_on", "quantity",
+                                                     "quantity_type", "area_m2", "days")):
+            raise serializers.ValidationError("La configuración no se modifica: cree otra simulación.")
+        return attrs
 
 
 class ProfileSerializer(serializers.ModelSerializer):

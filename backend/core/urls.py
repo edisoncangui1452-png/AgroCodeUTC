@@ -4,6 +4,7 @@ from . import views
 
 router = DefaultRouter()
 router.register("parcels", views.ParcelViewSet, basename="parcel")
+router.register("simulations", views.SimulationViewSet, basename="simulation")
 router.register("history", views.HistoryViewSet, basename="history")
 router.register("analyses", views.AnalysisViewSet, basename="analysis")
 router.register("crops", views.CropViewSet, basename="crop")

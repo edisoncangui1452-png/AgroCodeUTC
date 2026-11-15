@@ -17,17 +17,51 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from .models import AgronomicProfile, Agronomist, Analysis, Crop, CropHistory, Parcel
+from .models import AgronomicProfile, Agronomist, Analysis, Crop, CropHistory, CropSimulation, Parcel
 from .agronomy import cached_rotation_months, rotation_guidance
 from .ollama import OllamaUnavailable, check_model, review_strategy
 from .simulator_weather import WeatherUnavailable, get_simulator_weather
+from .simulator_engine import evaluate
+from django.utils import timezone
 from .serializers import (
     AgronomistSerializer, AnalysisSerializer, CropSerializer, HistorySerializer,
-    ParcelSerializer, ProfileSerializer, RegisterSerializer, UserSerializer,
+    ParcelSerializer, ProfileSerializer, RegisterSerializer, SimulationSerializer, UserSerializer,
 )
 from .services import UNITS, available_years, get_climate, get_dashboard_metrics, get_historical_baseline, historical_scenario, monthly_summary, recommendations
 
 User = get_user_model()
+
+
+class SimulationViewSet(viewsets.ModelViewSet):
+    serializer_class = SimulationSerializer
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_queryset(self):
+        queryset = CropSimulation.objects.filter(owner=self.request.user).select_related("parcel")
+        parcel_id = self.request.query_params.get("parcel")
+        if parcel_id:
+            if not parcel_id.isdecimal():
+                raise ValidationError({"parcel": "Identificador inválido."})
+            queryset = queryset.filter(parcel_id=parcel_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+    @action(detail=True, methods=["get"])
+    def evaluate(self, request, pk=None):
+        simulation = self.get_object()
+        refresh = request.query_params.get("refresh", "0")
+        if refresh not in ("0", "1"):
+            raise ValidationError({"refresh": "Use 0 o 1."})
+        try:
+            weather = get_simulator_weather(simulation.parcel, simulation.days, refresh=refresh == "1")
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        except WeatherUnavailable as exc:
+            return Response({"detail": str(exc)}, status=503, headers={"Cache-Control": "private, no-store"})
+        return Response(evaluate(simulation, weather, timezone.now()),
+                        headers={"Cache-Control": "private, no-store"})
 
 
 @api_view(["GET"])

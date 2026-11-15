@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { FlaskConical, MapPinned, Sprout } from 'lucide-react'
 import { api, errorMessage } from '../api'
-import { cropVisuals, Empty, Heading, ParcelSelect, useParcels } from './shared'
+import { Empty, Heading, ParcelSelect, useParcels } from './shared'
 import { fertilizerSlots, observationDays, shortCycleCrops } from './simulatorOptions'
 
 export function SimulatorPage() {
@@ -10,38 +10,62 @@ export function SimulatorPage() {
   const [params, setParams] = useSearchParams()
   const id = params.get('parcela') || ''
   const parcel = parcels.find(item => String(item.id) === id)
-  const [catalog, setCatalog] = useState([])
-  const [catalogError, setCatalogError] = useState('')
   const [crop, setCrop] = useState('')
   const [quantity, setQuantity] = useState('')
   const [area, setArea] = useState('')
+  const [plantedOn, setPlantedOn] = useState('')
+  const [quantityType, setQuantityType] = useState('seeds')
+  const [observedStage, setObservedStage] = useState('')
+  const [observedSoil, setObservedSoil] = useState('')
+  const [observedPlants, setObservedPlants] = useState('')
+  const [observedOn, setObservedOn] = useState('')
   const [days, setDays] = useState(4)
-  const [review, setReview] = useState(null)
+  const [simulation, setSimulation] = useState(null)
+  const [result, setResult] = useState(null)
+  const [simulationError, setSimulationError] = useState('')
+  const [simulationBusy, setSimulationBusy] = useState(false)
   const [weather, setWeather] = useState(null)
   const [weatherError, setWeatherError] = useState('')
   const [weatherBusy, setWeatherBusy] = useState(false)
   const requestVersion = useRef(0)
 
   useEffect(() => {
+    let active = true
     requestVersion.current += 1
     setWeather(null)
     setWeatherError('')
     setWeatherBusy(false)
+    setSimulation(null)
+    setResult(null)
+    setSimulationError('')
+    if (id) api.get('simulations/', { params: { parcel: id } }).then(({ data }) => {
+      if (!active) return
+      const last = (data.results || data)[0]
+      if (last) {
+        setSimulation(last)
+        setCrop(last.crop)
+        setQuantity(String(last.quantity))
+        setArea(String(last.area_m2))
+        setDays(last.days)
+        setPlantedOn(last.planted_on)
+        setQuantityType(last.quantity_type)
+        setObservedStage(last.observed_stage || '')
+        setObservedSoil(last.observed_soil_condition || '')
+        setObservedPlants(last.observed_plants == null ? '' : String(last.observed_plants))
+        setObservedOn(last.observed_on || '')
+      }
+    }).catch(err => { if (active) setSimulationError(errorMessage(err)) })
+    return () => { active = false }
   }, [id])
 
-  useEffect(() => {
-    api.get('crops/').then(({ data }) => setCatalog(data.results || data))
-      .catch(err => setCatalogError(errorMessage(err)))
-  }, [])
-
-  const crops = shortCycleCrops.map(name => catalog.find(item => item.name === name)).filter(Boolean)
   const areaNumber = Number(area)
-  const areaTooLarge = parcel && area !== '' && areaNumber > Number(parcel.area_ha)
+  const areaTooLarge = parcel && area !== '' && areaNumber > Number(parcel.area_ha) * 10000
 
   function selectParcel(value) {
     requestVersion.current += 1
     setParams(value ? { parcela: value } : {})
-    setReview(null)
+    setResult(null)
+    setSimulation(null)
     setArea('')
     setWeather(null)
     setWeatherError('')
@@ -51,7 +75,7 @@ export function SimulatorPage() {
   function selectDays(value) {
     requestVersion.current += 1
     setDays(value)
-    setReview(null)
+    setResult(null)
     setWeather(null)
     setWeatherError('')
     setWeatherBusy(false)
@@ -71,53 +95,101 @@ export function SimulatorPage() {
     }
   }
 
-  function submit(event) {
+  async function runEvaluation(saved, refresh = false) {
+    const { data } = await api.get(`simulations/${saved.id}/evaluate/`, { params: { refresh: refresh ? 1 : 0 } })
+    setResult(data)
+  }
+
+  async function submit(event) {
     event.preventDefault()
-    if (!parcel || !crops.some(item => item.name === crop) || !observationDays.includes(days) ||
+    if (!parcel || !shortCycleCrops.some(item => item.id === crop) || !observationDays.includes(days) ||
         !Number.isInteger(Number(quantity)) || Number(quantity) <= 0 ||
-        !Number.isFinite(areaNumber) || areaNumber <= 0 || areaTooLarge) return
-    setReview({ parcel: parcel.name, crop, quantity, area, days })
+        !Number.isFinite(areaNumber) || areaNumber <= 0 || areaTooLarge || !plantedOn) return
+    setSimulationBusy(true)
+    setSimulationError('')
+    try {
+      const settings = { parcel: Number(id), crop, planted_on: plantedOn, quantity: Number(quantity),
+        quantity_type: quantityType, area_m2: areaNumber, days }
+      const same = simulation && Object.entries(settings).every(([key, value]) => simulation[key] === value)
+      const saved = same ? simulation : (await api.post('simulations/', settings)).data
+      setSimulation(saved)
+      if (observedOn || observedStage || observedSoil || observedPlants !== '') {
+        const updated = (await api.patch(`simulations/${saved.id}/`, {
+          observed_on: observedOn || null, observed_stage: observedStage,
+          observed_soil_condition: observedSoil, observed_plants: observedPlants === '' ? null : Number(observedPlants),
+        })).data
+        setSimulation(updated)
+        await runEvaluation(updated)
+      } else await runEvaluation(saved)
+      loadWeather()
+    } catch (error) { setSimulationError(errorMessage(error)) } finally { setSimulationBusy(false) }
   }
 
   return <div>
-    <Heading eyebrow="04 / LABORATORIO AGRÍCOLA" title="Simulador agrícola" description="Configure una observación y consulte el contexto meteorológico de su parcela. No se calculan crecimiento, fertilización ni cosechas." />
+    <Heading eyebrow="04 / LABORATORIO AGRÍCOLA" title="Simulador agrícola" description="Evaluación agronómica parcial respaldada por fuentes y pronósticos. No estima altura, supervivencia ni rendimiento." />
     {!loading && !parcels.length ? <div className="mt-8"><Empty icon={MapPinned} title="Primero registre una parcela" text="Necesita una parcela para preparar su configuración de simulación." to="/parcelas" action="Crear parcela" /></div> : <div className="mt-8 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_290px]">
       <div className="min-w-0 space-y-5">
         <section className="panel">
           <h2 className="flex items-center gap-2 text-xl font-bold"><Sprout size={22} /> Configuración del cultivo</h2>
-          <p className="mt-2 text-sm text-muted">Los cultivos provienen de fichas FAO generales. Los periodos de 4, 7 y 45 días son modalidades de observación, no tiempos de cosecha.</p>
+          <p className="mt-2 text-sm text-muted">Cinco cultivos con fichas independientes; los periodos de 4, 7 y 45 días son horizontes meteorológicos, no garantía de cosecha.</p>
           <form className="mt-6 space-y-5" onSubmit={submit}>
             <fieldset>
               <legend className="text-sm font-bold">Cultivo de ciclo corto</legend>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {crops.map(item => <label key={item.id} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 ${crop === item.name ? 'border-leaf bg-mint' : 'border-line bg-paper'}`}>
-                  <input type="radio" name="cultivo" value={item.name} checked={crop === item.name} onChange={() => { setCrop(item.name); setReview(null) }} required />
-                  <span aria-hidden="true" className="text-2xl">{cropVisuals[item.name]}</span>
-                  <span><strong className="block text-sm">{item.name}</strong><span className="text-xs text-muted">Ficha general: {item.cycle_days}–{item.max_cycle_days || item.cycle_days} días</span></span>
+                {shortCycleCrops.map(item => <label key={item.id} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 ${crop === item.id ? 'border-leaf bg-mint' : 'border-line bg-paper'}`}>
+                  <input type="radio" name="cultivo" value={item.id} checked={crop === item.id} onChange={() => { setCrop(item.id); setResult(null) }} required />
+                  <span aria-hidden="true" className="text-2xl">🌱</span>
+                  <span><strong className="block text-sm">{item.name}</strong><span className="text-xs text-muted">Evaluación parcial por especie</span></span>
                 </label>)}
               </div>
-              {catalogError && <p role="alert" className="mt-3 text-sm text-red-700">No se pudo cargar el catálogo: {catalogError}</p>}
-              {!catalogError && !crops.length && <p className="mt-3 text-sm text-muted">Cargando cultivos disponibles…</p>}
             </fieldset>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="field">Cantidad sembrada (semillas o plántulas)
-                <input type="number" min="1" step="1" required value={quantity} onChange={event => { setQuantity(event.target.value); setReview(null) }} placeholder="Ej. 100" />
+              <label className="field">Fecha de siembra
+                <input type="date" required max={new Date().toISOString().slice(0, 10)} value={plantedOn} onChange={event => { setPlantedOn(event.target.value); setResult(null) }} />
               </label>
-              <label className="field">Superficie a utilizar (ha)
-                <input type="number" min="0.0001" step="any" required value={area} onChange={event => { setArea(event.target.value); setReview(null) }} placeholder="Ej. 0.25" aria-describedby="sim-area-help" />
+              <label className="field">Tipo de cantidad
+                <select value={quantityType} onChange={event => { setQuantityType(event.target.value); setResult(null) }}><option value="seeds">Semillas sembradas</option><option value="established_plants">Plantas establecidas</option></select>
+              </label>
+              <label className="field">Cantidad inicial
+                <input type="number" min="1" step="1" required value={quantity} onChange={event => { setQuantity(event.target.value); setResult(null) }} placeholder="Ej. 100" />
+              </label>
+              <label className="field">Superficie a utilizar (m²)
+                <input type="number" min="0.000001" step="any" required value={area} onChange={event => { setArea(event.target.value); setResult(null) }} placeholder="Ej. 25" aria-describedby="sim-area-help" />
                 <span id="sim-area-help" className="text-xs font-normal text-muted">No puede superar el área registrada de la parcela.</span>
-                {areaTooLarge && <small role="alert">La superficie supera el área de la parcela ({parcel.area_ha} ha).</small>}
+                {areaTooLarge && <small role="alert">La superficie supera el área de la parcela ({Number(parcel.area_ha) * 10000} m²).</small>}
               </label>
             </div>
+            <fieldset className="rounded-xl border border-line p-4">
+              <legend className="text-sm font-bold">Observación de campo (opcional)</legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="field">Etapa observada<select value={observedStage} onChange={event => setObservedStage(event.target.value)}><option value="">No observada</option>{[['siembra', 'Siembra'], ['germinacion', 'Germinación'], ['emergencia', 'Emergencia'], ['crecimiento_inicial', 'Crecimiento inicial'], ['desarrollo_vegetativo', 'Desarrollo vegetativo'], ['desarrollo_avanzado', 'Desarrollo avanzado'], ['posible_cosecha', 'Posible cosecha']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                <label className="field">Suelo observado<select value={observedSoil} onChange={event => setObservedSoil(event.target.value)}><option value="">No observado</option><option value="seco">Seco</option><option value="humedo">Húmedo</option><option value="encharcado">Encharcado</option></select></label>
+                <label className="field">Plantas contadas<input type="number" min="0" step="1" value={observedPlants} onChange={event => setObservedPlants(event.target.value)} /></label>
+                <label className="field">Fecha de observación<input type="date" max={new Date().toISOString().slice(0, 10)} value={observedOn} onChange={event => setObservedOn(event.target.value)} /></label>
+              </div>
+            </fieldset>
             <fieldset>
               <legend className="text-sm font-bold">Modalidad de observación</legend>
               <div className="mt-3 flex flex-wrap gap-3">{observationDays.map(value => <label key={value} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold ${days === value ? 'border-leaf bg-mint' : 'border-line bg-paper'}`}>
                 <input type="radio" name="modalidad" value={value} checked={days === value} onChange={() => selectDays(value)} /> {value} días
               </label>)}</div>
             </fieldset>
-            <button className="button button-dark" type="submit" disabled={!parcel || !crop || areaTooLarge}>Revisar configuración</button>
+            <button className="button button-dark" type="submit" disabled={!parcel || !crop || areaTooLarge || simulationBusy}>{simulationBusy ? 'Evaluando…' : 'Guardar y evaluar cultivo'}</button>
           </form>
-          {review && <div role="status" className="notice mt-5"><strong>Configuración preparada (sin simulación)</strong><p className="mt-2">Parcela: {review.parcel} · Cultivo: {review.crop} · Cantidad sembrada: {review.quantity} · Superficie: {review.area} ha · Modalidad: {review.days} días.</p><p className="mt-2">No se ha calculado crecimiento, fertilización ni rendimiento. Esta configuración no se guarda todavía.</p></div>}
+          {simulationError && <p role="alert" className="notice mt-4">{simulationError}</p>}
+          {simulation && <p className="mt-3 text-xs text-muted">Configuración guardada #{simulation.id}; fecha de siembra y observaciones se conservan al actualizar el pronóstico.</p>}
+          {result && <section role="status" className="notice mt-5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-bold">Evaluación parcial: {result.crop.name}</h3><button className="button button-dark" type="button" disabled={simulationBusy} onClick={async () => { setSimulationBusy(true); setSimulationError(''); try { await runEvaluation(simulation, true); loadWeather() } catch (error) { setSimulationError(errorMessage(error)) } finally { setSimulationBusy(false) } }}>Actualizar pronóstico y evaluación</button></div>
+            <p>Siembra: {result.planted_on} · {result.horizon_days} días · {result.weather.information_type} · Etapa: {result.stage || 'no confirmada'}</p>
+            <p>Densidad: {result.quantity.density_per_m2} {result.quantity.type === 'seeds' ? 'semillas' : 'plantas establecidas'}/m² · Plantas observadas: {result.quantity.observed_plants ?? 'sin dato'} · Cosechables: pendiente.</p>
+            {result.indicative_harvest_window && <p>Referencia externa de cosecha (no confirmada localmente): {result.indicative_harvest_window.from} a {result.indicative_harvest_window.to}.</p>}
+            <p>{result.qualitative_assessment}</p>
+            <p>Incertidumbre meteorológica: {result.uncertainty.weather}. Modelo agrícola: {result.uncertainty.crop_model}</p>
+            <div className="grid gap-2 md:grid-cols-2">{result.results.map(row => <article key={row.period_start} className="rounded-lg border border-line bg-paper p-3 text-sm"><strong>{row.period_start === row.period_end ? row.period_start : `${row.period_start} al ${row.period_end}`}</strong><p>Etapa: {row.stage || 'no confirmada'} ({row.stage_source}) · días desde siembra: {row.days_since_sowing.start}–{row.days_since_sowing.end}</p><p>Temperatura: {row.thermal.status} · Agua: {row.water.status} · Humedad: {row.humidity.status} · Radiación: {row.radiation.status}</p><p>Riesgos: {row.risks.map(risk => `${risk.code} (${risk.status})`).join(', ') || 'no identificados con datos disponibles'}.</p>{row.partial_sowing_period && <p>Semana parcialmente anterior a la siembra; no se atribuye clima diario.</p>}{row.meteorological_uncertainty && <p>Dispersión de escenarios meteorológicos disponible; ver panel meteorológico.</p>}{row.missing.length > 0 && <p>Sin dato: {row.missing.join(', ')}</p>}</article>)}</div>
+            {result.results.length === 0 && <p>Solo referencia climática histórica: no se proyecta el cultivo con esos datos.</p>}
+            <ul className="list-disc pl-5 text-xs">{result.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
+            <p className="text-xs">Fuentes: {result.crop.sources.map(source => <a className="mr-3 underline" href={source} key={source} target="_blank" rel="noreferrer">Ficha agronómica</a>)}</p>
+          </section>}
         </section>
         <section className="panel">
           <div className="flex flex-wrap items-start justify-between gap-4">

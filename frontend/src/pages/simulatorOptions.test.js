@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { fertilizerSlots, observationDays, shortCycleCrops } from './simulatorOptions.js'
 
-test('fase 1 ofrece cinco cultivos distintos del catálogo de referencia', () => {
-  assert.deepEqual(shortCycleCrops, ['Lechuga', 'Zanahoria', 'Rábano', 'Arveja', 'Repollo'])
-  assert.equal(new Set(shortCycleCrops).size, 5)
+test('fase 3 ofrece exclusivamente los cinco cultivos del motor', () => {
+  assert.deepEqual(shortCycleCrops.map(item => item.id), ['cilantro', 'rabano', 'rucula', 'lechuga_hoja', 'espinaca'])
+  assert.equal(new Set(shortCycleCrops.map(item => item.id)).size, 5)
 })
 
 test('solo ofrece las tres modalidades solicitadas y diez espacios sin productos', () => {
